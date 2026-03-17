@@ -340,6 +340,18 @@ const Editor: React.FC = () => {
         width: p.width || A4_WIDTH,
         height: p.height || A4_HEIGHT,
       }))
+
+      // Auto-fit zoom to screen
+      const isMob = window.innerWidth <= 768
+      const availW = window.innerWidth  - (isMob ? 24  : 248 + 256 + 80)
+      const availH = window.innerHeight - (isMob ? 120 : 56  + 80)
+      const fitZoom = Math.floor(Math.min(
+        (availW / (p.width  || A4_WIDTH))  * 100,
+        (availH / (p.height || A4_HEIGHT)) * 100,
+        isMob ? 60 : 90   // cap: 60% mobile, 90% desktop
+      ) / 5) * 5           // round to nearest 5%
+      dispatch(setZoom(Math.max(isMob ? 20 : 25, fitZoom)))
+
     } catch {
       toast.error('Failed to load project')
       navigate('/dashboard')
@@ -507,19 +519,48 @@ const Editor: React.FC = () => {
     toast.success('Exported as JSON template!')
   }
 
-  // ─── EXPORT PNG ───────────────────────────────────────────
   const exportAsPng = async () => {
     try {
       const { default: html2canvas } = await import('html2canvas')
-      const el = document.querySelector('.canvas-render-target') as HTMLElement
+
+      // Find the inner canvas div (full 1:1 size), not the scaled wrapper
+      const el = document.querySelector('.canvas-export-target') as HTMLElement
       if (!el) { toast.error('Canvas not found'); return }
-      const cv = await html2canvas(el, { scale: 2, useCORS: true, allowTaint: true })
+
+      // Temporarily force scale(1) so html2canvas captures at real resolution
+      const prevTransform = el.style.transform
+      const prevWidth = el.style.width
+      const prevHeight = el.style.height
+      el.style.transform = 'scale(1)'
+      el.style.width = `${width}px`
+      el.style.height = `${height}px`
+
+      const cv = await html2canvas(el, {
+        scale: 2,           // 2x for retina quality
+        useCORS: true,
+        allowTaint: true,
+        width,
+        height,
+        windowWidth: width,
+        windowHeight: height,
+        x: 0,
+        y: 0,
+      })
+
+      // Restore
+      el.style.transform = prevTransform
+      el.style.width = prevWidth
+      el.style.height = prevHeight
+
       const a = document.createElement('a')
       a.download = `${title || 'design'}.png`
       a.href = cv.toDataURL('image/png')
       a.click()
       toast.success('Exported as PNG!')
-    } catch { toast.error('PNG export failed') }
+    } catch (err) {
+      console.error(err)
+      toast.error('PNG export failed')
+    }
   }
 
   // ─── MOBILE PANEL STATE ───────────────────────────────────

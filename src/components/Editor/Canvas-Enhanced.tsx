@@ -375,8 +375,12 @@ const CanvasEnhanced: React.FC<Props> = ({
 
   const sorted = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
 
+  // Outer wrapper must be exactly scaled size so it doesn't overflow parent
+  const scaledW = Math.round(width  * scale)
+  const scaledH = Math.round(height * scale)
+
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', display: 'inline-block' }}>
+    <div style={{ position: 'relative', width: scaledW, height: scaledH, overflow: 'hidden', flexShrink: 0 }}>
       {/* Inline text editor rendered at scaled coords over the canvas */}
       {editingId && (() => {
         const el = elements.find(e => e.id === editingId)
@@ -389,10 +393,12 @@ const CanvasEnhanced: React.FC<Props> = ({
         ) : null
       })()}
 
+      {/* canvas-export-target: always full 1:1 size, used by PNG export */}
       <div
         ref={containerRef}
+        className="canvas-export-target"
         style={{
-          width, height, position: 'relative',
+          width, height, position: 'absolute', top: 0, left: 0,
           transform: `scale(${scale})`, transformOrigin: 'top left',
           cursor: 'default', overflow: 'hidden',
           ...getBackgroundStyle()
