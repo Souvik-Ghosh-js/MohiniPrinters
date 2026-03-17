@@ -61,7 +61,7 @@ const Dashboard: React.FC = () => {
           <div style={{ width: 32, height: 32, background: 'var(--brand)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ color: '#fff', fontSize: '1rem' }}>✦</span>
           </div>
-          <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>DesignStudio</span>
+          <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>MohiniPrinters</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <span style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>

@@ -38,7 +38,7 @@ const Register: React.FC = () => {
             <div style={{ width: 40, height: 40, background: 'var(--brand)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ color: '#fff', fontSize: '1.25rem' }}>✦</span>
             </div>
-            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>DesignStudio</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>MohiniPrinters</span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.5rem' }}>Create account</h1>
           <p style={{ color: 'var(--muted)' }}>Start designing for free today</p>
