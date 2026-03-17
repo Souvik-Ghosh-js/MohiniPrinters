@@ -522,6 +522,98 @@ const Editor: React.FC = () => {
     } catch { toast.error('PNG export failed') }
   }
 
+  // ─── MOBILE PANEL STATE ───────────────────────────────────
+  const [mobilePanel, setMobilePanel] = useState<LeftTab | RightTab | null>(null)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
+  const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768)
+
+  useEffect(() => {
+    const onResize = () => setIsMobileView(window.innerWidth <= 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const openMobilePanel = (panel: LeftTab | RightTab) => {
+    setMobilePanel(prev => prev === panel ? null : panel)
+  }
+
+  const PanelContent = ({ panel }: { panel: LeftTab | RightTab }) => {
+    if (panel === 'templates') return (
+      <div>
+        <ServerTemplatePanel
+          onApply={(f) => { handleApplyTemplate(f); setMobilePanel(null) }}
+          onSizeChange={(w,h,name)=>{ dispatch(setCanvasSize({width:w,height:h})); toast.success(`Canvas: ${name}`) }}
+          currentW={width} currentH={height}
+        />
+        <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
+          <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--muted)', marginBottom:6 }}>Upload Your Template</div>
+          <input ref={fileInputRef} type="file" accept=".json" onChange={handleLocalTemplateUpload} style={{ display:'none' }}/>
+          <button className="btn btn-secondary btn-sm" style={{ width:'100%', justifyContent:'center', fontSize:'0.75rem' }} onClick={()=>fileInputRef.current?.click()}>
+            <Upload size={13}/> Upload JSON Template
+          </button>
+        </div>
+      </div>
+    )
+    if (panel === 'assets') return <AssetsPanel onAddImage={(url)=>{ addImageEl(url); setMobilePanel(null) }} onSetBg={(url)=>{ handleSetBackground(url); setMobilePanel(null) }}/>
+    if (panel === 'add') return (
+      <div style={{ padding:'12px 8px' }}>
+        <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Add Elements</div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Text</div>
+          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:4 }} onClick={()=>{ addText(); setMobilePanel(null) }}>
+            <Type size={14}/> Add Text
+          </button>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+            <button className="btn btn-secondary btn-sm" onClick={()=>{ addShape('rect'); setMobilePanel(null) }}><div style={{ width:12, height:12, background:'currentColor', borderRadius:2 }}/> Rect</button>
+            <button className="btn btn-secondary btn-sm" onClick={()=>{ addShape('circle'); setMobilePanel(null) }}><div style={{ width:12, height:12, background:'currentColor', borderRadius:'50%' }}/> Circle</button>
+          </div>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image URL</div>
+          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:showImageInput?6:0 }} onClick={()=>setShowImageInput(v=>!v)}>
+            <ImageIcon size={14}/> Add Image URL
+          </button>
+          {showImageInput && (
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              <input className="input" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://…" style={{ fontSize:'0.8125rem' }}
+                onKeyDown={e=>{ if(e.key==='Enter'&&imageUrl.trim()){ addImageEl(imageUrl); setImageUrl(''); setShowImageInput(false); setMobilePanel(null) }}}/>
+              <button className="btn btn-primary btn-sm" onClick={()=>{ if(imageUrl.trim()){ addImageEl(imageUrl); setImageUrl(''); setShowImageInput(false); setMobilePanel(null) }}} disabled={!imageUrl.trim()}>Add to Canvas</button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+    if (panel === 'layers') return (
+      <LayersPanel elements={elements} selectedId={selectedElementId}
+        onSelect={id=>{ dispatch(selectElement(id)); setMobilePanel('properties') }}
+        onToggleVisibility={id=>dispatch(toggleVisibility(id))}
+        onToggleLock={id=>dispatch(toggleLock(id))}
+      />
+    )
+    if (panel === 'properties') return selectedElement ? (
+      <PropertiesPanelEnhanced
+        element={selectedElement}
+        onUpdate={updates=>{ dispatch(updateElement({id:selectedElement.id,updates})); clearTimeout((window as any).__ct); (window as any).__ct=setTimeout(()=>dispatch(commitUpdate()),600) }}
+        onDelete={()=>{ dispatch(deleteElement(selectedElement.id)); setMobilePanel(null) }}
+        onDuplicate={()=>dispatch(duplicateElement(selectedElement.id))}
+        onLock={()=>dispatch(toggleLock(selectedElement.id))}
+        onToggleVisibility={()=>dispatch(toggleVisibility(selectedElement.id))}
+        onBringForward={()=>dispatch(bringForward(selectedElement.id))}
+        onSendBackward={()=>dispatch(sendBackward(selectedElement.id))}
+      />
+    ) : (
+      <div style={{ padding:'2rem 1rem', textAlign:'center', color:'var(--muted)' }}>
+        <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>👆</div>
+        <p style={{ fontSize:'0.875rem', lineHeight:1.5 }}>Tap an element on the canvas to edit its properties</p>
+      </div>
+    )
+    if (panel === 'background') return <BackgroundEditor background={background} onUpdate={bg=>dispatch(updateBackground(bg))}/>
+    return null
+  }
+
   if (loading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
       <div style={{ textAlign:'center', color:'var(--muted)' }}>
@@ -531,6 +623,102 @@ const Editor: React.FC = () => {
     </div>
   )
 
+  // ─── MOBILE LAYOUT ────────────────────────────────────────
+  if (isMobileView) return (
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#e8eaf0', overflow:'hidden', position:'relative' }}>
+
+      {/* Mobile Top Bar */}
+      <header style={{ height:48, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200 }}>
+        <button className="btn btn-ghost btn-icon" style={{ padding:6 }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
+        <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveProject(false)}
+          style={{ border:'none', fontSize:'0.875rem', fontWeight:700, color:'var(--text)', background:'transparent', outline:'none', flex:1, minWidth:0 }}/>
+        <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
+        <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
+        <button className="btn btn-primary btn-sm" style={{ padding:'6px 12px', fontSize:'0.8125rem' }} onClick={()=>saveProject(true)} disabled={saving}>
+          {saving?'…':<><Save size={13}/> Save</>}
+        </button>
+      </header>
+
+      {/* Canvas fills remaining space */}
+      <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'16px 12px 0', background:'#e8eaf0' }}>
+        <div style={{ position:'relative' }}>
+          <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
+            <CanvasEnhanced
+              elements={elements} selectedId={selectedElementId}
+              onSelect={id=>{ dispatch(selectElement(id)); if(id) setMobilePanel('properties') }}
+              onUpdate={(id,updates)=>dispatch(updateElement({id,updates}))}
+              onCommit={()=>dispatch(commitUpdate())}
+              width={width} height={height} zoom={zoom} background={background}
+            />
+          </div>
+        </div>
+      </main>
+
+      {/* Bottom Sheet Panel (slides up) */}
+      {mobilePanel && (
+        <>
+          {/* Backdrop */}
+          <div onClick={()=>setMobilePanel(null)}
+            style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:299, top:48 }}/>
+          {/* Sheet */}
+          <div style={{
+            position:'fixed', bottom:64, left:0, right:0, zIndex:300,
+            background:'#fff', borderRadius:'20px 20px 0 0',
+            boxShadow:'0 -4px 32px rgba(0,0,0,0.18)',
+            maxHeight:'65vh', display:'flex', flexDirection:'column',
+            animation:'slideUp 0.25s ease'
+          }}>
+            {/* Sheet handle + title */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 8px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <div style={{ width:36, height:4, background:'var(--border)', borderRadius:2, margin:'0 auto' }}/>
+            </div>
+            <div style={{ overflowY:'auto', flex:1, paddingBottom:8 }}>
+              <PanelContent panel={mobilePanel}/>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Bottom Navigation Bar */}
+      <nav style={{
+        height:64, background:'#fff', borderTop:'1px solid var(--border)',
+        display:'flex', alignItems:'center', flexShrink:0, zIndex:400,
+        paddingBottom:'env(safe-area-inset-bottom)',
+      }}>
+        {([
+          ['templates', <Layout size={20}/>,    'Templates'],
+          ['assets',    <ImageIcon size={20}/>, 'Assets'],
+          ['add',       <AlignCenter size={20}/>,'Add'],
+          ['layers',    <Layers size={20}/>,    'Layers'],
+          ['properties',<Sliders size={20}/>,   'Edit'],
+          ['background',<Filter size={20}/>,    'BG'],
+        ] as [LeftTab|RightTab, React.ReactNode, string][]).map(([tab, icon, label]) => (
+          <button key={tab} onClick={()=>openMobilePanel(tab)}
+            style={{
+              flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+              gap:3, border:'none', background:'transparent', cursor:'pointer',
+              color: mobilePanel===tab ? 'var(--brand)' : 'var(--muted)',
+              padding:'6px 2px', fontSize:'0.55rem', fontWeight:600, textTransform:'uppercase',
+              borderTop: mobilePanel===tab ? '2px solid var(--brand)' : '2px solid transparent',
+              transition:'all 0.15s',
+            }}>
+            {icon}
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Slide-up animation */}
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+      `}</style>
+    </div>
+  )
+
+  // ─── DESKTOP LAYOUT ───────────────────────────────────────
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'var(--bg)', overflow:'hidden' }}>
 
@@ -552,8 +740,6 @@ const Editor: React.FC = () => {
         </select>
         <div style={{ flex:1 }}/>
         <span style={{ fontSize:'0.7rem', color:'var(--muted)', background:'var(--bg)', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
-
-        {/* Export buttons */}
         <button className="btn btn-ghost btn-sm" onClick={exportAsJson} title="Export as JSON template">
           <FileJson size={14}/> JSON
         </button>
@@ -586,8 +772,6 @@ const Editor: React.FC = () => {
           </div>
 
           <div style={{ flex:1, overflowY:'auto' }}>
-
-            {/* TEMPLATES TAB */}
             {leftTab==='templates' && (
               <div>
                 <ServerTemplatePanel
@@ -595,7 +779,6 @@ const Editor: React.FC = () => {
                   onSizeChange={(w,h,name)=>{ dispatch(setCanvasSize({width:w,height:h})); toast.success(`Canvas: ${name}`) }}
                   currentW={width} currentH={height}
                 />
-                {/* Upload local JSON */}
                 <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
                   <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--muted)', marginBottom:6 }}>Upload Your Template</div>
                   <input ref={fileInputRef} type="file" accept=".json" onChange={handleLocalTemplateUpload} style={{ display:'none' }}/>
@@ -605,24 +788,14 @@ const Editor: React.FC = () => {
                 </div>
               </div>
             )}
-
-            {/* ASSETS TAB */}
-            {leftTab==='assets' && (
-              <AssetsPanel onAddImage={addImageEl} onSetBg={handleSetBackground}/>
-            )}
-
-            {/* ADD ELEMENTS TAB */}
+            {leftTab==='assets' && <AssetsPanel onAddImage={addImageEl} onSetBg={handleSetBackground}/>}
             {leftTab==='add' && (
               <div style={{ padding:'12px 8px' }}>
                 <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Add Elements</div>
-
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Text</div>
-                  <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:4 }} onClick={addText}>
-                    <Type size={14}/> Add Text
-                  </button>
+                  <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:4 }} onClick={addText}><Type size={14}/> Add Text</button>
                 </div>
-
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
@@ -630,7 +803,6 @@ const Editor: React.FC = () => {
                     <button className="btn btn-secondary btn-sm" onClick={()=>addShape('circle')}><div style={{ width:12, height:12, background:'currentColor', borderRadius:'50%' }}/> Circle</button>
                   </div>
                 </div>
-
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image URL</div>
                   <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:showImageInput?6:0 }} onClick={()=>setShowImageInput(v=>!v)}>
@@ -646,8 +818,6 @@ const Editor: React.FC = () => {
                 </div>
               </div>
             )}
-
-            {/* LAYERS TAB */}
             {leftTab==='layers' && (
               <LayersPanel elements={elements} selectedId={selectedElementId}
                 onSelect={id=>{ dispatch(selectElement(id)); setRightTab('properties') }}
@@ -688,9 +858,7 @@ const Editor: React.FC = () => {
             ))}
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {rightTab==='background' && (
-              <BackgroundEditor background={background} onUpdate={bg=>dispatch(updateBackground(bg))}/>
-            )}
+            {rightTab==='background' && <BackgroundEditor background={background} onUpdate={bg=>dispatch(updateBackground(bg))}/>}
             {rightTab==='properties' && (
               selectedElement ? (
                 <PropertiesPanelEnhanced
