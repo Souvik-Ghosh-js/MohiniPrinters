@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { CanvasElement, Background, CanvasState } from '../../types/canvas'
+import { CanvasElement, Background, CanvasState, A4_WIDTH, A4_HEIGHT } from '../../types/canvas'
 
 const defaultBackground: Background = {
   type: 'solid',
@@ -10,9 +10,9 @@ const initialState: CanvasState = {
   elements: [],
   selectedElementId: null,
   background: defaultBackground,
-  width: 1920,
-  height: 1080,
-  zoom: 50,
+  width: A4_WIDTH,
+  height: A4_HEIGHT,
+  zoom: 75,
   history: [{ elements: [], background: defaultBackground }],
   historyIndex: 0,
 }
@@ -32,8 +32,8 @@ const canvasSlice = createSlice({
     loadProject(state, action: PayloadAction<{ elements: CanvasElement[]; background: Background; width: number; height: number }>) {
       state.elements = action.payload.elements || []
       state.background = action.payload.background || defaultBackground
-      state.width = action.payload.width
-      state.height = action.payload.height
+      state.width = action.payload.width || A4_WIDTH
+      state.height = action.payload.height || A4_HEIGHT
       state.history = [{ elements: JSON.parse(JSON.stringify(state.elements)), background: JSON.parse(JSON.stringify(state.background)) }]
       state.historyIndex = 0
     },

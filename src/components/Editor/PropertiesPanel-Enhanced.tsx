@@ -150,7 +150,7 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
           </Field>
           {p.textCurve && p.textCurve !== 'none' && (
             <div style={{ marginTop: 8 }}>
-              <SliderField label="Curve Amount" value={p.curveAmount || 50} min={1} max={200} onChange={v => up('curveAmount', v)} />
+              <SliderField label="Curve Amount (neg = down)" value={p.curveAmount ?? 50} min={-100} max={100} onChange={v => up('curveAmount', v)} />
             </div>
           )}
         </Section>

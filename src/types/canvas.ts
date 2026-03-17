@@ -88,7 +88,13 @@ export interface CanvasState {
   historyIndex: number
 }
 
+// A4 at 96dpi = 794×1123px
+export const A4_WIDTH = 794
+export const A4_HEIGHT = 1123
+
 export const DESIGN_TEMPLATES: Record<string, { name: string; width: number; height: number; category: string }> = {
+  a4_portrait: { name: 'A4 Portrait', width: 794, height: 1123, category: 'Print' },
+  a4_landscape: { name: 'A4 Landscape', width: 1123, height: 794, category: 'Print' },
   instagram_post: { name: 'Instagram Post', width: 1080, height: 1080, category: 'Social Media' },
   instagram_story: { name: 'Instagram Story', width: 1080, height: 1920, category: 'Social Media' },
   instagram_reel: { name: 'Instagram Reel', width: 1080, height: 1920, category: 'Social Media' },
