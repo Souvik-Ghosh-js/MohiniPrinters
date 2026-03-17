@@ -61,10 +61,10 @@ const Dashboard: React.FC = () => {
           <div style={{ width: 32, height: 32, background: 'var(--brand)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ color: '#fff', fontSize: '1rem' }}>✦</span>
           </div>
-          <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>MohiniPrinters</span>
+          <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem' }}>MohiniPrinters</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
+          <span className="header-greeting" style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
           {user?.is_admin && (
             <button className="btn btn-ghost btn-sm" onClick={() => navigate('/admin')}>
               <Settings size={14} /> Admin
@@ -78,7 +78,7 @@ const Dashboard: React.FC = () => {
 
       <main style={{ maxWidth: 1400, margin: '0 auto', padding: '2.5rem 2rem' }}>
         {/* Hero */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
+        <div className="dashboard-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
           <div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Your Designs</h1>
             <p style={{ color: 'var(--muted)' }}>{projects.length} project{projects.length !== 1 ? 's' : ''} — create stunning graphics for any platform</p>
@@ -99,7 +99,7 @@ const Dashboard: React.FC = () => {
             <button className="btn btn-primary" onClick={() => setShowNewModal(true)}><Plus size={18}/> Create First Design</button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.25rem' }}>
+          <div className="projects-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.25rem' }}>
             {projects.map(p => (
               <div key={p.id} onClick={() => navigate(`/editor/${p.id}`)}
                 style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)', transition: 'all 0.2s', boxShadow: 'var(--shadow)' }}
@@ -132,7 +132,7 @@ const Dashboard: React.FC = () => {
       {/* New Design Modal */}
       {showNewModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '2rem', width: 560, maxHeight: '80vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+          <div className="new-design-modal" style={{ background: '#fff', borderRadius: 16, padding: '2rem', width: 560, maxHeight: '80vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
             <h2 style={{ fontWeight: 800, marginBottom: '1.5rem', fontSize: '1.25rem' }}>Create New Design</h2>
 
             <div style={{ marginBottom: '1.25rem' }}>
@@ -145,7 +145,7 @@ const Dashboard: React.FC = () => {
               {categories.map(cat => (
                 <div key={cat} style={{ marginBottom: '1rem' }}>
                   <div style={{ fontSize: '0.75rem', color: 'var(--muted)', fontWeight: 700, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{cat}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                  <div className="size-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                     {templateEntries.filter(([, t]) => t.category === cat).map(([key, tpl]) => (
                       <button key={key} onClick={() => setSelectedSize(key)}
                         style={{ padding: '10px 8px', border: `2px solid ${selectedSize === key ? 'var(--brand)' : 'var(--border)'}`, borderRadius: 8, background: selectedSize === key ? 'var(--brand-light)' : '#fff', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}>
@@ -158,7 +158,7 @@ const Dashboard: React.FC = () => {
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <div className="modal-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={() => setShowNewModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleCreate}><Plus size={16} /> Create Design</button>
             </div>

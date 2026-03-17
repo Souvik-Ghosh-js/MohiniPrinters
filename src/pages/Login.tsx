@@ -30,7 +30,7 @@ const Login: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f0fdf7 0%, #e8f4ff 100%)' }}>
-      <div style={{ width: '100%', maxWidth: '420px', padding: '0 1rem' }}>
+      <div className="auth-wrapper" style={{ width: '100%', maxWidth: '420px', padding: '0 1rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
             <div style={{ width: 40, height: 40, background: 'var(--brand)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -42,7 +42,7 @@ const Login: React.FC = () => {
           <p style={{ color: 'var(--muted)' }}>Sign in to your account to continue</p>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: '16px', padding: '2rem', boxShadow: 'var(--shadow-lg)' }}>
+        <div className="auth-card" style={{ background: '#fff', borderRadius: '16px', padding: '2rem', boxShadow: 'var(--shadow-lg)' }}>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: '1rem' }}>
               <label className="label">Email</label>

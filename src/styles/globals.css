@@ -103,3 +103,144 @@ input, select, textarea { font-family: inherit; outline: none; }
   background: var(--brand); border-radius: 50%;
   cursor: pointer; box-shadow: 0 0 0 3px rgba(29,196,141,0.2);
 }
+
+/* ========================================
+   MOBILE RESPONSIVE
+   ======================================== */
+
+/* Viewport meta ensures correct scaling */
+html { -webkit-text-size-adjust: 100%; }
+
+/* Touch-friendly tap targets */
+button, a, input, select { touch-action: manipulation; }
+
+/* ---- Header ---- */
+@media (max-width: 600px) {
+  /* Hide greeting text on small screens */
+  .header-greeting { display: none !important; }
+
+  /* Tighter header padding */
+  header {
+    padding: 0 1rem !important;
+  }
+
+  /* Smaller logo text */
+  .header-logo-text {
+    font-size: 0.95rem !important;
+  }
+}
+
+/* ---- Dashboard Main ---- */
+@media (max-width: 768px) {
+  main {
+    padding: 1.25rem 1rem !important;
+  }
+
+  /* Stack hero row vertically */
+  .dashboard-hero {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .dashboard-hero h1 {
+    font-size: 1.4rem !important;
+  }
+
+  .dashboard-hero .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Projects grid: 2 columns on tablet, 1 on phone */
+  .projects-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.875rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .projects-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* ---- New Design Modal ---- */
+@media (max-width: 600px) {
+  .new-design-modal {
+    width: calc(100vw - 2rem) !important;
+    max-height: 90vh !important;
+    padding: 1.25rem !important;
+    border-radius: 12px !important;
+  }
+
+  .new-design-modal .size-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .new-design-modal .modal-actions {
+    flex-direction: column-reverse !important;
+  }
+
+  .new-design-modal .modal-actions .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+/* ---- Login / Register ---- */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 1.5rem !important;
+    border-radius: 12px !important;
+  }
+
+  .auth-wrapper {
+    padding: 0 0.75rem !important;
+  }
+}
+
+/* ---- Admin Page ---- */
+@media (max-width: 768px) {
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .admin-table-wrap {
+    overflow-x: auto !important;
+  }
+}
+
+/* ---- Editor toolbar on mobile ---- */
+@media (max-width: 768px) {
+  .editor-top-bar {
+    padding: 0 0.5rem !important;
+    gap: 0.25rem !important;
+  }
+
+  .editor-top-bar .toolbar-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  /* Hide label text in toolbar on mobile */
+  .toolbar-label { display: none !important; }
+}
+
+/* ---- Generic helpers ---- */
+@media (max-width: 600px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
+}
+
+.show-mobile { display: none; }
+
+/* Smooth scrolling */
+* { scroll-behavior: smooth; }
+
+/* Better tap highlight */
+* { -webkit-tap-highlight-color: rgba(29, 196, 141, 0.15); }
+
+/* Prevent horizontal scroll globally */
+body { overflow-x: hidden; }
