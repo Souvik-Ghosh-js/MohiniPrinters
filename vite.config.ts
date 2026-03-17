@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://13.126.144.58',
+        target: 'https://mohini.gobt.in',
         changeOrigin: true
       }
     }
