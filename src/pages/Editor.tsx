@@ -673,7 +673,7 @@ const Editor: React.FC = () => {
         <button className="btn btn-ghost btn-icon" style={{ padding:6 }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
-          <img src="/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
         </div>
         <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
         <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
