@@ -671,8 +671,10 @@ const Editor: React.FC = () => {
       {/* Mobile Top Bar */}
       <header style={{ height:48, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200 }}>
         <button className="btn btn-ghost btn-icon" style={{ padding:6 }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
-        <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveProject(false)}
-          style={{ border:'none', fontSize:'0.875rem', fontWeight:700, color:'var(--text)', background:'transparent', outline:'none', flex:1, minWidth:0 }}/>
+        {/* Mohini Logo - top center */}
+        <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
+          <img src="/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
+        </div>
         <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
         <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
         <button className="btn btn-primary btn-sm" style={{ padding:'6px 12px', fontSize:'0.8125rem' }} onClick={()=>saveProject(true)} disabled={saving}>
@@ -722,31 +724,42 @@ const Editor: React.FC = () => {
 
       {/* Bottom Navigation Bar */}
       <nav style={{
-        height:64, background:'#fff', borderTop:'1px solid var(--border)',
-        display:'flex', alignItems:'center', flexShrink:0, zIndex:400,
+        background:'#fff', borderTop:'1px solid var(--border)',
+        display:'flex', flexDirection:'column', flexShrink:0, zIndex:400,
         paddingBottom:'env(safe-area-inset-bottom)',
       }}>
-        {([
-          ['templates', <Layout size={20}/>,    'Templates'],
-          ['assets',    <ImageIcon size={20}/>, 'Assets'],
-          ['add',       <AlignCenter size={20}/>,'Add'],
-          ['layers',    <Layers size={20}/>,    'Layers'],
-          ['properties',<Sliders size={20}/>,   'Edit'],
-          ['background',<Filter size={20}/>,    'BG'],
-        ] as [LeftTab|RightTab, React.ReactNode, string][]).map(([tab, icon, label]) => (
-          <button key={tab} onClick={()=>openMobilePanel(tab)}
-            style={{
-              flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-              gap:3, border:'none', background:'transparent', cursor:'pointer',
-              color: mobilePanel===tab ? 'var(--brand)' : 'var(--muted)',
-              padding:'6px 2px', fontSize:'0.55rem', fontWeight:600, textTransform:'uppercase',
-              borderTop: mobilePanel===tab ? '2px solid var(--brand)' : '2px solid transparent',
-              transition:'all 0.15s',
-            }}>
-            {icon}
-            {label}
-          </button>
-        ))}
+        {/* Tool buttons row */}
+        <div style={{ height:58, display:'flex', alignItems:'center' }}>
+          {([
+            ['templates', <Layout size={19}/>,    'Templates'],
+            ['assets',    <ImageIcon size={19}/>, 'Assets'],
+            ['add',       <AlignCenter size={19}/>,'Add'],
+            ['layers',    <Layers size={19}/>,    'Layers'],
+            ['properties',<Sliders size={19}/>,   'Edit'],
+            ['background',<Filter size={19}/>,    'BG'],
+          ] as [LeftTab|RightTab, React.ReactNode, string][]).map(([tab, icon, label]) => (
+            <button key={tab} onClick={()=>openMobilePanel(tab)}
+              style={{
+                flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                gap:2, border:'none', background:'transparent', cursor:'pointer',
+                color: mobilePanel===tab ? 'var(--brand)' : 'var(--muted)',
+                padding:'5px 2px', fontSize:'0.5rem', fontWeight:600, textTransform:'uppercase',
+                borderTop: mobilePanel===tab ? '2px solid var(--brand)' : '2px solid transparent',
+                transition:'all 0.15s', height:'100%',
+              }}>
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+
+       <div style={{ borderTop:'1px solid var(--border)', padding:'4px 0', display:'flex', justifyContent:'center', alignItems:'center' }}>
+  <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
+    style={{ display:'flex', alignItems:'center', gap:5, textDecoration:'none' }}>
+    <img src="/assets/gobt_logo.jpg" alt="GOBT" style={{ height:22, objectFit:'cover' }} />
+    <span style={{ fontSize:'0.6rem', color:'var(--muted)', fontWeight:500 }}>Powered by GOBT</span>
+  </a>
+</div>
       </nav>
 
       {/* Slide-up animation */}
@@ -764,11 +777,11 @@ const Editor: React.FC = () => {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'var(--bg)', overflow:'hidden' }}>
 
       {/* ─── TOP TOOLBAR ─── */}
-      <header style={{ height:56, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100 }}>
+      <header style={{ height:56, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100, position:'relative' }}>
         <button className="btn btn-ghost btn-icon" onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         <div style={{ width:1, height:28, background:'var(--border)' }}/>
         <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveProject(false)}
-          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'var(--text)', background:'transparent', outline:'none', minWidth:120, maxWidth:240 }}/>
+          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'var(--text)', background:'transparent', outline:'none', minWidth:120, maxWidth:200 }}/>
         <div style={{ width:1, height:28, background:'var(--border)' }}/>
         <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0} title="Undo"><Undo size={16}/></button>
         <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1} title="Redo"><Redo size={16}/></button>
@@ -779,6 +792,12 @@ const Editor: React.FC = () => {
         <select value={zoom} onChange={e=>dispatch(setZoom(+e.target.value))} style={{ fontSize:'0.75rem', border:'1px solid var(--border)', borderRadius:6, padding:'4px 6px', background:'#fff', cursor:'pointer' }}>
           {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z}>{z}%</option>)}
         </select>
+
+        {/* Mohini Logo — centered absolutely */}
+        <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center' }}>
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain' }} />
+        </div>
+
         <div style={{ flex:1 }}/>
         <span style={{ fontSize:'0.7rem', color:'var(--muted)', background:'var(--bg)', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
         <button className="btn btn-ghost btn-sm" onClick={exportAsJson} title="Export as JSON template">
@@ -870,7 +889,7 @@ const Editor: React.FC = () => {
         </aside>
 
         {/* ─── CANVAS ─── */}
-        <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'40px 32px', background:'#e8eaf0' }}>
+        <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', padding:'40px 32px 24px', background:'#e8eaf0', position:'relative' }}>
           <div style={{ position:'relative' }}>
             <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
               <CanvasEnhanced
@@ -884,6 +903,15 @@ const Editor: React.FC = () => {
             <div style={{ position:'absolute', bottom:-26, left:'50%', transform:'translateX(-50%)', fontSize:'0.72rem', color:'#8899aa', whiteSpace:'nowrap' }}>
               {width} × {height} px
             </div>
+          </div>
+
+          {/* GOBT Logo — bottom center of canvas area */}
+          <div style={{ position:'fixed', bottom:16, left: 248 + 16, display:'flex', alignItems:'center', zIndex:50 }}>
+            <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
+              style={{ display:'flex', alignItems:'center', gap:6, textDecoration:'none', background:'rgba(255,255,255,0.92)', padding:'5px 10px', borderRadius:20, boxShadow:'0 2px 8px rgba(0,0,0,0.12)', border:'1px solid var(--border)' }}>
+              <img src="/gobt_logo.png" alt="GOBT" style={{ height:34, objectFit:'contain' }} />
+              <span style={{ fontSize:'0.65rem', color:'var(--muted)', fontWeight:600 }}>Powered by GOBT</span>
+            </a>
           </div>
         </main>
 

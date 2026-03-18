@@ -1,6 +1,48 @@
-import React from 'react'
-import { Trash2, Copy, Lock, Unlock, Eye, EyeOff, ChevronUp, ChevronDown } from 'lucide-react'
+import React, { useState } from 'react'
+import { Trash2, Copy, Lock, Unlock, Eye, EyeOff, ChevronUp, ChevronDown, Languages } from 'lucide-react'
 import { CanvasElement } from '../../types/canvas'
+
+// ─── BENGALI FONTS (loaded via Google Fonts in index.html) ────
+const BENGALI_FONTS = [
+  { label: 'Hind Siliguri',      value: 'Hind Siliguri' },
+  { label: 'Baloo Da 2',         value: 'Baloo Da 2' },
+  { label: 'Tiro Bangla',        value: 'Tiro Bangla' },
+  { label: 'Noto Serif Bengali', value: 'Noto Serif Bengali' },
+  { label: 'Alkatra',            value: 'Alkatra' },
+  { label: 'Galada',             value: 'Galada' },
+  { label: 'Anek Bangla',        value: 'Anek Bangla' },
+  { label: 'Kalam',              value: 'Kalam' },
+]
+
+const ENGLISH_FONTS = [
+  'Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana',
+  'Trebuchet MS', 'Impact', 'Comic Sans MS', 'Palatino', 'Garamond',
+  'Bookman', 'Tahoma', 'Helvetica',
+]
+
+// ─── ENGLISH → BENGALI TRANSLITERATION ───────────────────────
+// Uses Google Input Tools API (free, no key needed for reasonable usage)
+const transliterateEnToBn = async (text: string): Promise<string> => {
+  // Split into words and transliterate each
+  const words = text.trim().split(/\s+/)
+  const results: string[] = []
+  for (const word of words) {
+    if (!word) continue
+    try {
+      const url = `https://inputtools.google.com/request?text=${encodeURIComponent(word)}&itc=bn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=test`
+      const res = await fetch(url)
+      const json = await res.json()
+      if (json[0] === 'SUCCESS' && json[1]?.[0]?.[1]?.[0]) {
+        results.push(json[1][0][1][0])
+      } else {
+        results.push(word)
+      }
+    } catch {
+      results.push(word)
+    }
+  }
+  return results.join(' ')
+}
 
 interface Props {
   element: CanvasElement
@@ -43,9 +85,30 @@ const SliderField: React.FC<{ label: string; value: number; min: number; max: nu
 
 const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete, onDuplicate, onLock, onToggleVisibility, onBringForward, onSendBackward }) => {
   const p = element.properties
+  const [showTranslit, setShowTranslit]   = useState(false)
+  const [translitInput, setTranslitInput] = useState('')
+  const [translitLoading, setTranslitLoading] = useState(false)
 
   const up = (key: string, val: any) => onUpdate({ properties: { ...p, [key]: val } })
   const upNested = (parent: string, key: string, val: any) => onUpdate({ properties: { ...p, [parent]: { ...(p as any)[parent], [key]: val } } })
+
+  const handleTransliterate = async () => {
+    if (!translitInput.trim()) return
+    setTranslitLoading(true)
+    try {
+      const result = await transliterateEnToBn(translitInput)
+      up('text', (p.text || '') + (p.text ? ' ' : '') + result)
+      setTranslitInput('')
+      // Auto-switch to a Bengali font if currently on English font
+      if (ENGLISH_FONTS.includes(p.fontFamily || 'Arial')) {
+        up('fontFamily', 'Hind Siliguri')
+      }
+    } finally {
+      setTranslitLoading(false)
+    }
+  }
+
+  const isBengaliFont = BENGALI_FONTS.some(f => f.value === p.fontFamily)
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.8125rem', background: '#fff', color: 'var(--text)' }
 
@@ -78,14 +141,66 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
       {/* ═══ TEXT PROPERTIES ═══ */}
       {element.type === 'text' && <>
         <Section title="Text Content">
-          <textarea value={p.text || ''} onChange={e => up('text', e.target.value)} style={{ ...inputStyle, minHeight: 64, resize: 'vertical', fontFamily: p.fontFamily || 'Arial' }} />
+          <textarea value={p.text || ''} onChange={e => up('text', e.target.value)}
+            style={{ ...inputStyle, minHeight: 64, resize: 'vertical', fontFamily: p.fontFamily || 'Arial', fontSize: '1rem' }} />
+
+          {/* ── English → Bengali transliteration ── */}
+          <div style={{ marginTop: 8 }}>
+            <button
+              onClick={() => setShowTranslit(v => !v)}
+              style={{ display:'flex', alignItems:'center', gap:5, width:'100%', padding:'6px 8px', border:'1px solid var(--brand)', borderRadius:6, background: showTranslit ? 'var(--brand-light)' : '#fff', color:'var(--brand)', fontSize:'0.75rem', fontWeight:600, cursor:'pointer', justifyContent:'center' }}>
+              <Languages size={13}/> English → বাংলা {showTranslit ? '▲' : '▼'}
+            </button>
+
+            {showTranslit && (
+              <div style={{ marginTop:6, padding:'8px', background:'#f8fffe', border:'1px solid var(--brand)', borderRadius:8 }}>
+                <div style={{ fontSize:'0.68rem', color:'var(--muted)', marginBottom:4, fontWeight:600 }}>
+                  Type English phonetically (e.g. "amar sonar bangla")
+                </div>
+                <div style={{ display:'flex', gap:5 }}>
+                  <input
+                    value={translitInput}
+                    onChange={e => setTranslitInput(e.target.value)}
+                    onKeyDown={e => { if(e.key==='Enter') handleTransliterate() }}
+                    placeholder="amar sonar bangla..."
+                    style={{ ...inputStyle, flex:1, fontSize:'0.8rem' }}
+                  />
+                  <button
+                    onClick={handleTransliterate}
+                    disabled={translitLoading || !translitInput.trim()}
+                    style={{ padding:'6px 10px', background:'var(--brand)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:'0.75rem', fontWeight:600, whiteSpace:'nowrap', opacity: translitLoading ? 0.6 : 1 }}>
+                    {translitLoading ? '...' : '→ বাংলা'}
+                  </button>
+                </div>
+                <div style={{ fontSize:'0.65rem', color:'var(--muted)', marginTop:4 }}>
+                  Appends Bengali text. Press Enter or click button.
+                </div>
+              </div>
+            )}
+          </div>
         </Section>
 
         <Section title="Typography">
+          {/* Font Family — split English / Bengali */}
           <Field label="Font Family">
-            <select style={inputStyle} value={p.fontFamily || 'Arial'} onChange={e => up('fontFamily', e.target.value)}>
-              {['Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Trebuchet MS', 'Impact', 'Comic Sans MS', 'Palatino', 'Garamond', 'Bookman', 'Tahoma', 'Helvetica', 'Futura'].map(f => <option key={f}>{f}</option>)}
+            <div style={{ display:'flex', gap:4, marginBottom:4 }}>
+              <button onClick={() => {}} style={{ flex:1, padding:'3px 0', fontSize:'0.65rem', fontWeight:700, border:'1px solid var(--border)', borderRadius:4, background: !isBengaliFont ? 'var(--brand)' : '#fff', color: !isBengaliFont ? '#fff' : 'var(--muted)', cursor:'default' }}>English</button>
+              <button onClick={() => {}} style={{ flex:1, padding:'3px 0', fontSize:'0.65rem', fontWeight:700, border:'1px solid var(--border)', borderRadius:4, background: isBengaliFont ? 'var(--brand)' : '#fff', color: isBengaliFont ? '#fff' : 'var(--muted)', cursor:'default' }}>বাংলা</button>
+            </div>
+            <select style={{ ...inputStyle, fontFamily: p.fontFamily }} value={p.fontFamily || 'Arial'} onChange={e => up('fontFamily', e.target.value)}>
+              <optgroup label="── Bengali Fonts ──">
+                {BENGALI_FONTS.map(f => (
+                  <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="── English Fonts ──">
+                {ENGLISH_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+              </optgroup>
             </select>
+            {/* Font preview */}
+            <div style={{ marginTop:4, padding:'6px 8px', background:'#f8f9fa', borderRadius:6, fontFamily: p.fontFamily, fontSize:'0.95rem', color:'var(--text)', textAlign:'center', minHeight:28 }}>
+              {isBengaliFont ? 'আমার সোনার বাংলা' : 'The quick brown fox'}
+            </div>
           </Field>
           <div style={{ marginTop: 8 }} />
           <Row2>
