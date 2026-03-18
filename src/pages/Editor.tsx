@@ -756,7 +756,7 @@ const Editor: React.FC = () => {
        <div style={{ borderTop:'1px solid var(--border)', padding:'4px 0', display:'flex', justifyContent:'center', alignItems:'center' }}>
   <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
     style={{ display:'flex', alignItems:'center', gap:5, textDecoration:'none' }}>
-    <img src="/assets/gobt_logo.jpg" alt="GOBT" style={{ height:22, objectFit:'cover' }} />
+    <img src="/assets/gobt_logo.png" alt="GOBT" style={{ height:22, objectFit:'cover' }} />
     <span style={{ fontSize:'0.6rem', color:'var(--muted)', fontWeight:500 }}>Powered by GOBT</span>
   </a>
 </div>
