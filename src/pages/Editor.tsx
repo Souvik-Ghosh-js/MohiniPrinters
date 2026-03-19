@@ -909,7 +909,7 @@ const Editor: React.FC = () => {
           <div style={{ position:'fixed', bottom:16, left: 248 + 16, display:'flex', alignItems:'center', zIndex:50 }}>
             <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
               style={{ display:'flex', alignItems:'center', gap:6, textDecoration:'none', background:'rgba(255,255,255,0.92)', padding:'5px 10px', borderRadius:20, boxShadow:'0 2px 8px rgba(0,0,0,0.12)', border:'1px solid var(--border)' }}>
-              <img src="/gobt_logo.png" alt="GOBT" style={{ height:34, objectFit:'contain' }} />
+              <img src="/assets/gobt_logo.png" alt="GOBT" style={{ height:34, objectFit:'contain' }} />
               <span style={{ fontSize:'0.65rem', color:'var(--muted)', fontWeight:600 }}>Powered by GOBT</span>
             </a>
           </div>
