@@ -702,7 +702,11 @@ const Editor: React.FC = () => {
     )
     if (panel === 'layers') return (
       <LayersPanel elements={elements} selectedId={selectedElementId}
-        onSelect={id=>{ dispatch(selectElement(id)); setMobilePanel('properties') }}
+        onSelect={id=>{
+          dispatch(selectElement(id))
+          const tapped = elements.find(e => e.id === id)
+          if (tapped?.type !== 'text') setMobilePanel('properties')
+        }}
         onToggleVisibility={id=>dispatch(toggleVisibility(id))}
         onToggleLock={id=>dispatch(toggleLock(id))}
         onBringForward={id=>dispatch(bringForward(id))}
@@ -763,7 +767,14 @@ const Editor: React.FC = () => {
           <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
             <CanvasEnhanced
               elements={elements} selectedId={selectedElementId}
-              onSelect={id=>{ dispatch(selectElement(id)); if(id) setMobilePanel('properties') }}
+              onSelect={id=>{
+                dispatch(selectElement(id))
+                if (id) {
+                  const tapped = elements.find(e => e.id === id)
+                  // Text elements: don't auto-open panel — first tap selects, second tap opens keyboard
+                  if (tapped?.type !== 'text') setMobilePanel('properties')
+                }
+              }}
               onUpdate={(id,updates)=>dispatch(updateElement({id,updates}))}
               onCommit={()=>dispatch(commitUpdate())}
               width={width} height={height} zoom={zoom} background={background}
