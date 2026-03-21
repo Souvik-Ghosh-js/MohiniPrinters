@@ -158,7 +158,6 @@ const CanvasEnhanced: React.FC<Props> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const lastTap = useRef<{ id: string; time: number } | null>(null)
   const scale = zoom / 100
 
   const getBackgroundStyle = (): React.CSSProperties => {
@@ -301,6 +300,9 @@ const CanvasEnhanced: React.FC<Props> = ({
   const handleTouchStart = useCallback((e: React.TouchEvent, el: CanvasElement) => {
     if (el.locked || editingId === el.id) return
     e.stopPropagation()
+
+    // Capture selection state BEFORE this tap changes it
+    const wasAlreadySelected = selectedId === el.id
     onSelect(el.id)
 
     const touch = e.touches[0]
@@ -327,23 +329,17 @@ const CanvasEnhanced: React.FC<Props> = ({
 
       if (moved) {
         onCommit()
-      } else if (el.type === 'text') {
-        // Double-tap detection for text editing
-        const now = Date.now()
-        const prev = lastTap.current
-        if (prev && prev.id === el.id && now - prev.time < 350) {
-          ev.preventDefault()
-          setEditingId(el.id)
-          lastTap.current = null
-        } else {
-          lastTap.current = { id: el.id, time: now }
-        }
+      } else if (el.type === 'text' && wasAlreadySelected) {
+        // Second tap on an already-selected text element → open keyboard
+        ev.preventDefault()
+        setEditingId(el.id)
       }
+      // First tap on an unselected element just selects it (no editor)
     }
 
     window.addEventListener('touchmove', onTouchMove, { passive: false })
     window.addEventListener('touchend', onTouchEnd)
-  }, [scale, onUpdate, onCommit, onSelect, editingId])
+  }, [scale, onUpdate, onCommit, onSelect, editingId, selectedId])
 
   // ─── TOUCH RESIZE (mobile handles) ───────────────────────
   const handleResizeTouchStart = useCallback((e: React.TouchEvent, el: CanvasElement, handle: string) => {
