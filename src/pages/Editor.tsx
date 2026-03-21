@@ -632,6 +632,8 @@ const Editor: React.FC = () => {
         onSelect={id=>{ dispatch(selectElement(id)); setMobilePanel('properties') }}
         onToggleVisibility={id=>dispatch(toggleVisibility(id))}
         onToggleLock={id=>dispatch(toggleLock(id))}
+        onBringForward={id=>dispatch(bringForward(id))}
+        onSendBackward={id=>dispatch(sendBackward(id))}
       />
     )
     if (panel === 'properties') return selectedElement ? (
@@ -883,6 +885,8 @@ const Editor: React.FC = () => {
                 onSelect={id=>{ dispatch(selectElement(id)); setRightTab('properties') }}
                 onToggleVisibility={id=>dispatch(toggleVisibility(id))}
                 onToggleLock={id=>dispatch(toggleLock(id))}
+                onBringForward={id=>dispatch(bringForward(id))}
+                onSendBackward={id=>dispatch(sendBackward(id))}
               />
             )}
           </div>

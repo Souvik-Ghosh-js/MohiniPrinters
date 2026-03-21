@@ -93,7 +93,8 @@ const InlineTextEditor: React.FC<{
     borderRadius: 2,
     padding: '4px 6px',
     background: 'rgba(255,255,255,0.95)',
-    fontSize: `${(p.fontSize || 24) * scale}px`,
+    // Minimum 16px font so iOS doesn't auto-zoom on focus
+    fontSize: `${Math.max((p.fontSize || 24) * scale, 16)}px`,
     fontFamily: p.fontFamily || 'Arial',
     color: p.fill || '#000',
     fontWeight: p.fontWeight || '400',
@@ -105,6 +106,8 @@ const InlineTextEditor: React.FC<{
     cursor: 'text',
     overflow: 'hidden',
     boxSizing: 'border-box',
+    WebkitUserSelect: 'text',
+    touchAction: 'manipulation',
   }
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -121,6 +124,11 @@ const InlineTextEditor: React.FC<{
       onKeyDown={handleKey}
       onClick={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
+      onTouchStart={e => e.stopPropagation()}
+      inputMode="text"
+      autoCapitalize="sentences"
+      autoCorrect="on"
+      spellCheck={true}
     />
   )
 }
@@ -131,6 +139,7 @@ const CanvasEnhanced: React.FC<Props> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const lastTap = useRef<{ id: string; time: number } | null>(null)
   const scale = zoom / 100
 
   const getBackgroundStyle = (): React.CSSProperties => {
@@ -274,6 +283,21 @@ const CanvasEnhanced: React.FC<Props> = ({
     setEditingId(el.id)
   }, [])
 
+  // ─── DOUBLE TAP (mobile): enter text edit mode ───────────
+  const onTouchTap = useCallback((e: React.TouchEvent, el: CanvasElement) => {
+    if (el.type !== 'text' || el.locked) return
+    const now = Date.now()
+    const prev = lastTap.current
+    if (prev && prev.id === el.id && now - prev.time < 300) {
+      e.stopPropagation()
+      e.preventDefault()
+      setEditingId(el.id)
+      lastTap.current = null
+    } else {
+      lastTap.current = { id: el.id, time: now }
+    }
+  }, [])
+
   const finishEdit = useCallback((id: string, text: string) => {
     onUpdate(id, { properties: { ...elements.find(e => e.id === id)!.properties, text } })
     onCommit()
@@ -306,6 +330,7 @@ const CanvasEnhanced: React.FC<Props> = ({
         style={getElementWrapStyle(el)}
         onMouseDown={e => { if (!isEditing) onMouseDown(e, el, 'drag') }}
         onDoubleClick={e => onDoubleClick(e, el)}
+        onTouchEnd={e => onTouchTap(e, el)}
       >
         {/* TEXT */}
         {el.type === 'text' && !isEditing && (
