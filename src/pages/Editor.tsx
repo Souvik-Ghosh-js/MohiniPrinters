@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Save, Undo, Redo, ZoomIn, ZoomOut, Download,
-  Type, Image as ImageIcon, Square, Layers, Layout, Sliders,
+  Type, Image as ImageIcon, Layers, Layout, Sliders,
   AlignCenter, Upload, FileJson, RefreshCw, Filter
 } from 'lucide-react'
 import { RootState } from '../store'
@@ -286,6 +286,7 @@ const AssetsPanel: React.FC<{
 const Editor: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const dispatch = useDispatch()
   const { token } = useSelector((s: RootState) => s.auth)
   const { elements, selectedElementId, background, width, height, zoom, historyIndex, history } = useSelector((s: RootState) => s.canvas)
@@ -348,9 +349,28 @@ const Editor: React.FC = () => {
       const fitZoom = Math.floor(Math.min(
         (availW / (p.width  || A4_WIDTH))  * 100,
         (availH / (p.height || A4_HEIGHT)) * 100,
-        isMob ? 60 : 90   // cap: 60% mobile, 90% desktop
-      ) / 5) * 5           // round to nearest 5%
+        isMob ? 60 : 90
+      ) / 5) * 5
       dispatch(setZoom(Math.max(isMob ? 20 : 25, fitZoom)))
+
+      // If the user chose an admin template from the Dashboard, apply it now
+      const routeState = location.state as { templateUrl?: string; templateName?: string } | null
+      if (routeState?.templateUrl) {
+        try {
+          const tplRes = await fetch(routeState.templateUrl)
+          if (tplRes.ok) {
+            const contentType = tplRes.headers.get('content-type') || ''
+            if (contentType.includes('application/json') || routeState.templateUrl.endsWith('.json')) {
+              const json = await tplRes.json()
+              applyFabricTemplate(json, dispatch, toast)
+            } else {
+              // It's an image — use it as background
+              dispatch(updateBackground({ type: 'image', image: { src: routeState.templateUrl, opacity: 100, blur: 0, scale: 1 } }))
+              toast.success(`Template "${routeState.templateName || ''}" applied`)
+            }
+          }
+        } catch { /* ignore template load failure — project still opens */ }
+      }
 
     } catch {
       toast.error('Failed to load project')
@@ -383,11 +403,11 @@ const Editor: React.FC = () => {
     dispatch(addElement(el)); setRightTab('properties')
   }
 
-  const addShape = (type: 'rect'|'circle') => {
+  const addShape = (shapeType: string) => {
     const el: CanvasElement = {
       id: makeId(), type: 'shape', x: width/2-75, y: height/2-75,
       width: 150, height: 150, rotation: 0, opacity: 100, zIndex: nextZ(), locked: false, visible: true,
-      properties: { fill: '#1dc48d', borderRadius: type==='circle'?999:0, blendMode: 'normal' }
+      properties: { fill: '#1dc48d', borderRadius: shapeType==='circle'?999:0, shapeType, blendMode: 'normal' }
     }
     dispatch(addElement(el)); setRightTab('properties')
   }
@@ -565,14 +585,40 @@ const Editor: React.FC = () => {
 
   // ─── MOBILE PANEL STATE ───────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<LeftTab | RightTab | null>(null)
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
-  const [isMobileView, setIsMobileView] = useState(window.innerWidth <= 768)
+  // Use matchMedia (not innerWidth) so virtual keyboard opening doesn't flip mobile/desktop layout
+  const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null
+  const [isMobileView, setIsMobileView] = useState(mq ? mq.matches : false)
 
   useEffect(() => {
-    const onResize = () => setIsMobileView(window.innerWidth <= 768)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    if (!mq) return
+    const handler = (e: MediaQueryListEvent) => setIsMobileView(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
   }, [])
+
+  // ─── DRAGGABLE BOTTOM SHEET ───────────────────────────────
+  const [sheetHeightVh, setSheetHeightVh] = useState(65) // percent of viewport height
+  const sheetDragRef = useRef<{ startY: number; startH: number } | null>(null)
+
+  const onSheetHandleTouchStart = (e: React.TouchEvent) => {
+    sheetDragRef.current = { startY: e.touches[0].clientY, startH: sheetHeightVh }
+  }
+  const onSheetHandleTouchMove = (e: React.TouchEvent) => {
+    if (!sheetDragRef.current) return
+    e.preventDefault()
+    const dy = sheetDragRef.current.startY - e.touches[0].clientY
+    const viewH = window.innerHeight
+    const newH = Math.min(92, Math.max(20, sheetDragRef.current.startH + (dy / viewH) * 100))
+    setSheetHeightVh(newH)
+  }
+  const onSheetHandleTouchEnd = () => {
+    sheetDragRef.current = null
+    // Snap to sensible heights or close if dragged very low
+    if (sheetHeightVh < 22) { setMobilePanel(null); setSheetHeightVh(65) }
+    else if (sheetHeightVh < 45) setSheetHeightVh(35)
+    else if (sheetHeightVh < 70) setSheetHeightVh(65)
+    else setSheetHeightVh(90)
+  }
 
   const openMobilePanel = (panel: LeftTab | RightTab) => {
     setMobilePanel(prev => prev === panel ? null : panel)
@@ -583,7 +629,15 @@ const Editor: React.FC = () => {
       <div>
         <ServerTemplatePanel
           onApply={(f) => { handleApplyTemplate(f); setMobilePanel(null) }}
-          onSizeChange={(w,h,name)=>{ dispatch(setCanvasSize({width:w,height:h})); toast.success(`Canvas: ${name}`) }}
+          onSizeChange={(w,h,name)=>{
+            dispatch(setCanvasSize({width:w,height:h}))
+            const availW = window.innerWidth - 24
+            const availH = window.innerHeight - 200
+            const fitZ = Math.floor(Math.min((availW/w)*100,(availH/h)*100,60)/5)*5
+            dispatch(setZoom(Math.max(20, fitZ)))
+            toast.success(`Canvas: ${name}`)
+            setMobilePanel(null)
+          }}
           currentW={width} currentH={height}
         />
         <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
@@ -607,9 +661,27 @@ const Editor: React.FC = () => {
         </div>
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-            <button className="btn btn-secondary btn-sm" onClick={()=>{ addShape('rect'); setMobilePanel(null) }}><div style={{ width:12, height:12, background:'currentColor', borderRadius:2 }}/> Rect</button>
-            <button className="btn btn-secondary btn-sm" onClick={()=>{ addShape('circle'); setMobilePanel(null) }}><div style={{ width:12, height:12, background:'currentColor', borderRadius:'50%' }}/> Circle</button>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5, padding:'0 4px' }}>
+            {[
+              { type:'rect',        label:'Rect',     preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:2}}/> },
+              { type:'circle',      label:'Circle',   preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:'50%'}}/> },
+              { type:'triangle',    label:'Triangle', preview:<div style={{width:0,height:0,borderLeft:'7px solid transparent',borderRight:'7px solid transparent',borderBottom:'14px solid currentColor'}}/> },
+              { type:'diamond',     label:'Diamond',  preview:<div style={{width:12,height:12,background:'currentColor',transform:'rotate(45deg)'}}/> },
+              { type:'star',        label:'Star',     preview:<span style={{fontSize:14,lineHeight:'1'}}>★</span> },
+              { type:'pentagon',    label:'Pentagon', preview:<span style={{fontSize:13,lineHeight:'1'}}>⬠</span> },
+              { type:'hexagon',     label:'Hexagon',  preview:<span style={{fontSize:13,lineHeight:'1'}}>⬡</span> },
+              { type:'arrow_right', label:'Arrow',    preview:<span style={{fontSize:13,lineHeight:'1'}}>➤</span> },
+              { type:'cross',       label:'Cross',    preview:<span style={{fontSize:15,lineHeight:'1',fontWeight:700}}>✚</span> },
+              { type:'parallelogram',label:'Parallelogram',preview:<span style={{fontSize:12,lineHeight:'1'}}>▱</span> },
+              { type:'trapezoid',   label:'Trapezoid',preview:<span style={{fontSize:12,lineHeight:'1'}}>⏢</span> },
+              { type:'heart',       label:'Heart',    preview:<span style={{fontSize:14,lineHeight:'1'}}>♥</span> },
+            ].map(({type, label, preview}) => (
+              <button key={type} className="btn btn-secondary btn-sm"
+                style={{ flexDirection:'column', gap:3, padding:'6px 4px', fontSize:'0.58rem', height:48, justifyContent:'center', alignItems:'center' }}
+                onClick={()=>{ addShape(type); setMobilePanel(null) }}>
+                {preview}{label}
+              </button>
+            ))}
           </div>
         </div>
         <div style={{ marginBottom:12 }}>
@@ -684,9 +756,9 @@ const Editor: React.FC = () => {
         </button>
       </header>
 
-      {/* Canvas fills remaining space */}
-      <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'16px 12px 0', background:'#e8eaf0' }}>
-        <div style={{ position:'relative' }}>
+      {/* Canvas fills remaining space - centered both ways */}
+      <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 12px', background:'#e8eaf0' }}>
+        <div style={{ position:'relative', flexShrink: 0 }}>
           <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
             <CanvasEnhanced
               elements={elements} selectedId={selectedElementId}
@@ -696,26 +768,31 @@ const Editor: React.FC = () => {
               width={width} height={height} zoom={zoom} background={background}
             />
           </div>
+          <div style={{ textAlign:'center', fontSize:'0.65rem', color:'#8899aa', marginTop:6 }}>{width} × {height} px</div>
         </div>
       </main>
 
-      {/* Bottom Sheet Panel (slides up) */}
+      {/* Bottom Sheet Panel (slides up, draggable) */}
       {mobilePanel && (
         <>
-          {/* Backdrop */}
-          <div onClick={()=>setMobilePanel(null)}
+          {/* Backdrop — only captures taps outside the sheet */}
+          <div onClick={()=>{ setMobilePanel(null); setSheetHeightVh(65) }}
             style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:299, top:48 }}/>
           {/* Sheet */}
           <div style={{
             position:'fixed', bottom:64, left:0, right:0, zIndex:300,
             background:'#fff', borderRadius:'20px 20px 0 0',
             boxShadow:'0 -4px 32px rgba(0,0,0,0.18)',
-            maxHeight:'65vh', display:'flex', flexDirection:'column',
-            animation:'slideUp 0.25s ease'
+            height:`${sheetHeightVh}vh`, display:'flex', flexDirection:'column',
+            animation:'slideUp 0.25s ease', transition:'height 0.1s ease',
           }}>
-            {/* Sheet handle + title */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 8px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <div style={{ width:36, height:4, background:'var(--border)', borderRadius:2, margin:'0 auto' }}/>
+            {/* Drag handle — touch this to resize the sheet */}
+            <div
+              onTouchStart={onSheetHandleTouchStart}
+              onTouchMove={onSheetHandleTouchMove}
+              onTouchEnd={onSheetHandleTouchEnd}
+              style={{ padding:'10px 16px 6px', borderBottom:'1px solid var(--border)', flexShrink:0, cursor:'row-resize', touchAction:'none' }}>
+              <div style={{ width:40, height:5, background:'#d1d5db', borderRadius:3, margin:'0 auto' }}/>
             </div>
             <div style={{ overflowY:'auto', flex:1, paddingBottom:8 }}>
               <PanelContent panel={mobilePanel}/>
@@ -838,7 +915,16 @@ const Editor: React.FC = () => {
               <div>
                 <ServerTemplatePanel
                   onApply={handleApplyTemplate}
-                  onSizeChange={(w,h,name)=>{ dispatch(setCanvasSize({width:w,height:h})); toast.success(`Canvas: ${name}`) }}
+                  onSizeChange={(w,h,name)=>{
+                    dispatch(setCanvasSize({width:w,height:h}))
+                    // Recalculate zoom to fit new size
+                    const isMob = isMobileView
+                    const availW = window.innerWidth - (isMob ? 24 : 248 + 256 + 80)
+                    const availH = window.innerHeight - (isMob ? 120 : 56 + 80)
+                    const fitZ = Math.floor(Math.min((availW/w)*100,(availH/h)*100,isMob?60:90)/5)*5
+                    dispatch(setZoom(Math.max(isMob?20:25, fitZ)))
+                    toast.success(`Canvas: ${name}`)
+                  }}
                   currentW={width} currentH={height}
                 />
                 <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
@@ -860,9 +946,27 @@ const Editor: React.FC = () => {
                 </div>
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>addShape('rect')}><div style={{ width:12, height:12, background:'currentColor', borderRadius:2 }}/> Rect</button>
-                    <button className="btn btn-secondary btn-sm" onClick={()=>addShape('circle')}><div style={{ width:12, height:12, background:'currentColor', borderRadius:'50%' }}/> Circle</button>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5, padding:'0 4px' }}>
+                    {[
+                      { type:'rect',        label:'Rect',     preview:<div style={{width:13,height:13,background:'currentColor',borderRadius:2}}/> },
+                      { type:'circle',      label:'Circle',   preview:<div style={{width:13,height:13,background:'currentColor',borderRadius:'50%'}}/> },
+                      { type:'triangle',    label:'Triangle', preview:<div style={{width:0,height:0,borderLeft:'6px solid transparent',borderRight:'6px solid transparent',borderBottom:'13px solid currentColor'}}/> },
+                      { type:'diamond',     label:'Diamond',  preview:<div style={{width:11,height:11,background:'currentColor',transform:'rotate(45deg)'}}/> },
+                      { type:'star',        label:'Star',     preview:<span style={{fontSize:13,lineHeight:'1'}}>★</span> },
+                      { type:'pentagon',    label:'Pentagon', preview:<span style={{fontSize:12,lineHeight:'1'}}>⬠</span> },
+                      { type:'hexagon',     label:'Hexagon',  preview:<span style={{fontSize:12,lineHeight:'1'}}>⬡</span> },
+                      { type:'arrow_right', label:'Arrow',    preview:<span style={{fontSize:12,lineHeight:'1'}}>➤</span> },
+                      { type:'cross',       label:'Cross',    preview:<span style={{fontSize:14,lineHeight:'1',fontWeight:700}}>✚</span> },
+                      { type:'parallelogram',label:'Parallelogram',preview:<span style={{fontSize:11,lineHeight:'1'}}>▱</span> },
+                      { type:'trapezoid',   label:'Trapezoid',preview:<span style={{fontSize:11,lineHeight:'1'}}>⏢</span> },
+                      { type:'heart',       label:'Heart',    preview:<span style={{fontSize:13,lineHeight:'1'}}>♥</span> },
+                    ].map(({type, label, preview}) => (
+                      <button key={type} className="btn btn-secondary btn-sm"
+                        style={{ flexDirection:'column', gap:2, padding:'5px 3px', fontSize:'0.57rem', height:44, justifyContent:'center', alignItems:'center' }}
+                        onClick={()=>addShape(type)}>
+                        {preview}{label}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div style={{ marginBottom:12 }}>
@@ -893,8 +997,8 @@ const Editor: React.FC = () => {
         </aside>
 
         {/* ─── CANVAS ─── */}
-        <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', padding:'40px 32px 24px', background:'#e8eaf0', position:'relative' }}>
-          <div style={{ position:'relative' }}>
+        <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'32px', background:'#e8eaf0', position:'relative' }}>
+          <div style={{ position:'relative', flexShrink: 0 }}>
             <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
               <CanvasEnhanced
                 elements={elements} selectedId={selectedElementId}
@@ -904,7 +1008,7 @@ const Editor: React.FC = () => {
                 width={width} height={height} zoom={zoom} background={background}
               />
             </div>
-            <div style={{ position:'absolute', bottom:-26, left:'50%', transform:'translateX(-50%)', fontSize:'0.72rem', color:'#8899aa', whiteSpace:'nowrap' }}>
+            <div style={{ textAlign:'center', marginTop:10, fontSize:'0.72rem', color:'#8899aa', whiteSpace:'nowrap' }}>
               {width} × {height} px
             </div>
           </div>

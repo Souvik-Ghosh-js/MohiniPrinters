@@ -13,6 +13,21 @@ interface Props {
   background: Background
 }
 
+// ─── SHAPE CLIP PATHS ─────────────────────────────────────────
+const SHAPE_CLIPS: Record<string, string> = {
+  triangle:     'polygon(50% 0%, 0% 100%, 100% 100%)',
+  diamond:      'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+  star:         'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
+  pentagon:     'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
+  hexagon:      'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+  arrow_right:  'polygon(0% 20%, 60% 20%, 60% 0%, 100% 50%, 60% 100%, 60% 80%, 0% 80%)',
+  arrow_up:     'polygon(50% 0%, 100% 60%, 80% 60%, 80% 100%, 20% 100%, 20% 60%, 0% 60%)',
+  cross:        'polygon(10% 40%, 40% 40%, 40% 10%, 60% 10%, 60% 40%, 90% 40%, 90% 60%, 60% 60%, 60% 90%, 40% 90%, 40% 60%, 10% 60%)',
+  parallelogram:'polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%)',
+  trapezoid:    'polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%)',
+  heart: `path('M 50 30 A 20 20 0 0 1 90 30 Q 90 60 50 90 Q 10 60 10 30 A 20 20 0 0 1 50 30 Z')`,
+}
+
 // ─── CURVED TEXT SVG ─────────────────────────────────────────
 const CurvedText: React.FC<{ text: string; width: number; height: number; style: React.CSSProperties; curve: string; curveAmount: number }> = ({
   text, width, height, style, curve, curveAmount
@@ -22,7 +37,6 @@ const CurvedText: React.FC<{ text: string; width: number; height: number; style:
   const h = height
   const id = `curve-${Math.abs(text.length * 7 + amount)}`
 
-  // Arc path: amount positive = arch up, negative = arch down
   const buildPath = () => {
     if (curve === 'arc') {
       const bend = (amount / 100) * h * 2
@@ -73,10 +87,14 @@ const InlineTextEditor: React.FC<{
   const p = el.properties
 
   useEffect(() => {
-    if (ref.current) {
-      ref.current.focus()
-      ref.current.select()
-    }
+    // Delay focus slightly so the DOM is ready and iOS keyboard triggers
+    const t = setTimeout(() => {
+      if (ref.current) {
+        ref.current.focus()
+        ref.current.setSelectionRange(ref.current.value.length, ref.current.value.length)
+      }
+    }, 80)
+    return () => clearTimeout(t)
   }, [])
 
   const style: React.CSSProperties = {
@@ -93,7 +111,7 @@ const InlineTextEditor: React.FC<{
     borderRadius: 2,
     padding: '4px 6px',
     background: 'rgba(255,255,255,0.95)',
-    // Minimum 16px font so iOS doesn't auto-zoom on focus
+    // Minimum 16px so iOS doesn't auto-zoom on focus
     fontSize: `${Math.max((p.fontSize || 24) * scale, 16)}px`,
     fontFamily: p.fontFamily || 'Arial',
     color: p.fill || '#000',
@@ -124,7 +142,8 @@ const InlineTextEditor: React.FC<{
       onKeyDown={handleKey}
       onClick={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
-      onTouchStart={e => e.stopPropagation()}
+      onTouchStart={e => { e.stopPropagation() }}
+      onTouchEnd={e => { e.stopPropagation() }}
       inputMode="text"
       autoCapitalize="sentences"
       autoCorrect="on"
@@ -228,9 +247,10 @@ const CanvasEnhanced: React.FC<Props> = ({
     userSelect: 'none',
     outline: selectedId === el.id ? '2px solid #1dc48d' : 'none',
     boxShadow: selectedId === el.id ? '0 0 0 1px #1dc48d44' : undefined,
+    touchAction: 'none', // prevent scroll during drag on mobile
   })
 
-  // ─── DRAG / RESIZE / ROTATE ──────────────────────────────
+  // ─── MOUSE DRAG / RESIZE / ROTATE ────────────────────────
   const onMouseDown = useCallback((
     e: React.MouseEvent, el: CanvasElement,
     type: 'drag' | 'resize' | 'rotate', handle?: string
@@ -242,21 +262,23 @@ const CanvasEnhanced: React.FC<Props> = ({
 
     const startX = e.clientX
     const startY = e.clientY
+    const startElX = el.x, startElY = el.y
+    const startW = el.width, startH = el.height
 
     const onMove = (ev: MouseEvent) => {
       const dx = (ev.clientX - startX) / scale
       const dy = (ev.clientY - startY) / scale
       if (type === 'drag') {
-        onUpdate(el.id, { x: el.x + dx, y: el.y + dy })
+        onUpdate(el.id, { x: startElX + dx, y: startElY + dy })
       } else if (type === 'resize') {
-        if (handle === 'se') onUpdate(el.id, { width: Math.max(20, el.width + dx), height: Math.max(20, el.height + dy) })
-        else if (handle === 'sw') onUpdate(el.id, { x: el.x + dx, width: Math.max(20, el.width - dx), height: Math.max(20, el.height + dy) })
-        else if (handle === 'ne') onUpdate(el.id, { y: el.y + dy, width: Math.max(20, el.width + dx), height: Math.max(20, el.height - dy) })
-        else if (handle === 'nw') onUpdate(el.id, { x: el.x + dx, y: el.y + dy, width: Math.max(20, el.width - dx), height: Math.max(20, el.height - dy) })
-        else if (handle === 'n') onUpdate(el.id, { y: el.y + dy, height: Math.max(20, el.height - dy) })
-        else if (handle === 's') onUpdate(el.id, { height: Math.max(20, el.height + dy) })
-        else if (handle === 'e') onUpdate(el.id, { width: Math.max(20, el.width + dx) })
-        else if (handle === 'w') onUpdate(el.id, { x: el.x + dx, width: Math.max(20, el.width - dx) })
+        if (handle === 'se') onUpdate(el.id, { width: Math.max(20, startW + dx), height: Math.max(20, startH + dy) })
+        else if (handle === 'sw') onUpdate(el.id, { x: startElX + dx, width: Math.max(20, startW - dx), height: Math.max(20, startH + dy) })
+        else if (handle === 'ne') onUpdate(el.id, { y: startElY + dy, width: Math.max(20, startW + dx), height: Math.max(20, startH - dy) })
+        else if (handle === 'nw') onUpdate(el.id, { x: startElX + dx, y: startElY + dy, width: Math.max(20, startW - dx), height: Math.max(20, startH - dy) })
+        else if (handle === 'n') onUpdate(el.id, { y: startElY + dy, height: Math.max(20, startH - dy) })
+        else if (handle === 's') onUpdate(el.id, { height: Math.max(20, startH + dy) })
+        else if (handle === 'e') onUpdate(el.id, { width: Math.max(20, startW + dx) })
+        else if (handle === 'w') onUpdate(el.id, { x: startElX + dx, width: Math.max(20, startW - dx) })
       } else if (type === 'rotate') {
         const rect = containerRef.current?.getBoundingClientRect()
         if (!rect) return
@@ -275,27 +297,95 @@ const CanvasEnhanced: React.FC<Props> = ({
     window.addEventListener('mouseup', onUp)
   }, [scale, onUpdate, onCommit, onSelect])
 
+  // ─── TOUCH DRAG (mobile) ──────────────────────────────────
+  const handleTouchStart = useCallback((e: React.TouchEvent, el: CanvasElement) => {
+    if (el.locked || editingId === el.id) return
+    e.stopPropagation()
+    onSelect(el.id)
+
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const startElX = el.x
+    const startElY = el.y
+    let moved = false
+
+    const onTouchMove = (ev: TouchEvent) => {
+      const t = ev.touches[0]
+      const dx = (t.clientX - startX) / scale
+      const dy = (t.clientY - startY) / scale
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        moved = true
+        ev.preventDefault()
+        onUpdate(el.id, { x: startElX + dx, y: startElY + dy })
+      }
+    }
+
+    const onTouchEnd = (ev: TouchEvent) => {
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+
+      if (moved) {
+        onCommit()
+      } else if (el.type === 'text') {
+        // Double-tap detection for text editing
+        const now = Date.now()
+        const prev = lastTap.current
+        if (prev && prev.id === el.id && now - prev.time < 350) {
+          ev.preventDefault()
+          setEditingId(el.id)
+          lastTap.current = null
+        } else {
+          lastTap.current = { id: el.id, time: now }
+        }
+      }
+    }
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+  }, [scale, onUpdate, onCommit, onSelect, editingId])
+
+  // ─── TOUCH RESIZE (mobile handles) ───────────────────────
+  const handleResizeTouchStart = useCallback((e: React.TouchEvent, el: CanvasElement, handle: string) => {
+    if (el.locked) return
+    e.stopPropagation()
+    e.preventDefault()
+
+    const touch = e.touches[0]
+    const startX = touch.clientX
+    const startY = touch.clientY
+    const startElX = el.x, startElY = el.y
+    const startW = el.width, startH = el.height
+
+    const onMove = (ev: TouchEvent) => {
+      ev.preventDefault()
+      const t = ev.touches[0]
+      const dx = (t.clientX - startX) / scale
+      const dy = (t.clientY - startY) / scale
+      if (handle === 'se') onUpdate(el.id, { width: Math.max(20, startW + dx), height: Math.max(20, startH + dy) })
+      else if (handle === 'sw') onUpdate(el.id, { x: startElX + dx, width: Math.max(20, startW - dx), height: Math.max(20, startH + dy) })
+      else if (handle === 'ne') onUpdate(el.id, { y: startElY + dy, width: Math.max(20, startW + dx), height: Math.max(20, startH - dy) })
+      else if (handle === 'nw') onUpdate(el.id, { x: startElX + dx, y: startElY + dy, width: Math.max(20, startW - dx), height: Math.max(20, startH - dy) })
+      else if (handle === 'n') onUpdate(el.id, { y: startElY + dy, height: Math.max(20, startH - dy) })
+      else if (handle === 's') onUpdate(el.id, { height: Math.max(20, startH + dy) })
+      else if (handle === 'e') onUpdate(el.id, { width: Math.max(20, startW + dx) })
+      else if (handle === 'w') onUpdate(el.id, { x: startElX + dx, width: Math.max(20, startW - dx) })
+    }
+    const onEnd = () => {
+      onCommit()
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onEnd)
+    }
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onEnd)
+  }, [scale, onUpdate, onCommit])
+
   // ─── DOUBLE CLICK: enter text edit mode ──────────────────
   const onDoubleClick = useCallback((e: React.MouseEvent, el: CanvasElement) => {
     if (el.type !== 'text' || el.locked) return
     e.stopPropagation()
     e.preventDefault()
     setEditingId(el.id)
-  }, [])
-
-  // ─── DOUBLE TAP (mobile): enter text edit mode ───────────
-  const onTouchTap = useCallback((e: React.TouchEvent, el: CanvasElement) => {
-    if (el.type !== 'text' || el.locked) return
-    const now = Date.now()
-    const prev = lastTap.current
-    if (prev && prev.id === el.id && now - prev.time < 300) {
-      e.stopPropagation()
-      e.preventDefault()
-      setEditingId(el.id)
-      lastTap.current = null
-    } else {
-      lastTap.current = { id: el.id, time: now }
-    }
   }, [])
 
   const finishEdit = useCallback((id: string, text: string) => {
@@ -317,6 +407,38 @@ const CanvasEnhanced: React.FC<Props> = ({
     se: { bottom: -5, right: -5, cursor: 'se-resize' },
   }
 
+  // ─── RENDER SHAPE ─────────────────────────────────────────
+  const renderShape = (el: CanvasElement) => {
+    const p = el.properties
+    // Determine effective shape type
+    const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
+    const clip = SHAPE_CLIPS[st]
+    const bg = p.fill || '#1dc48d'
+    const strokeStyle = p.stroke ? `${p.stroke.width}px solid ${p.stroke.color}` : undefined
+
+    if (st === 'heart') {
+      // SVG heart since clip-path path() has limited support
+      return (
+        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <path d="M50,85 C50,85 10,60 10,35 A20,20,0,0,1,50,25 A20,20,0,0,1,90,35 C90,60 50,85 50,85 Z"
+            fill={bg} stroke={p.stroke?.color} strokeWidth={p.stroke?.width} />
+        </svg>
+      )
+    }
+
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: bg,
+        borderRadius: st === 'circle' ? '50%' : (st === 'rect' ? (p.borderRadius || 0) : 0),
+        clipPath: clip,
+        border: (!clip && st !== 'circle') ? strokeStyle : undefined,
+        boxSizing: 'border-box',
+      }} />
+    )
+  }
+
   // ─── RENDER ELEMENT ──────────────────────────────────────
   const renderElement = (el: CanvasElement) => {
     const isSelected = selectedId === el.id
@@ -330,7 +452,7 @@ const CanvasEnhanced: React.FC<Props> = ({
         style={getElementWrapStyle(el)}
         onMouseDown={e => { if (!isEditing) onMouseDown(e, el, 'drag') }}
         onDoubleClick={e => onDoubleClick(e, el)}
-        onTouchEnd={e => onTouchTap(e, el)}
+        onTouchStart={e => { if (!isEditing) handleTouchStart(e, el) }}
       >
         {/* TEXT */}
         {el.type === 'text' && !isEditing && (
@@ -359,14 +481,7 @@ const CanvasEnhanced: React.FC<Props> = ({
         )}
 
         {/* SHAPE */}
-        {el.type === 'shape' && (
-          <div style={{
-            width: '100%', height: '100%',
-            background: p.fill || '#1dc48d',
-            borderRadius: p.borderRadius || 0,
-            border: p.stroke ? `${p.stroke.width}px solid ${p.stroke.color}` : undefined
-          }} />
-        )}
+        {el.type === 'shape' && renderShape(el)}
 
         {/* SELECTION HANDLES */}
         {isSelected && !el.locked && !isEditing && (
@@ -375,24 +490,34 @@ const CanvasEnhanced: React.FC<Props> = ({
               <div
                 key={h}
                 onMouseDown={e => onMouseDown(e, el, 'resize', h)}
-                style={{ position: 'absolute', ...handlePos[h], width: 10, height: 10, background: '#fff', border: '2px solid #1dc48d', borderRadius: 2, zIndex: 10 }}
+                onTouchStart={e => handleResizeTouchStart(e, el, h)}
+                style={{ position: 'absolute', ...handlePos[h], width: 12, height: 12, background: '#fff', border: '2px solid #1dc48d', borderRadius: 2, zIndex: 10, touchAction: 'none' }}
               />
             ))}
             {/* Rotate handle */}
             <div
               onMouseDown={e => onMouseDown(e, el, 'rotate')}
-              style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', width: 16, height: 16, background: '#1dc48d', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, background: '#1dc48d', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
             >
-              <span style={{ color: '#fff', fontSize: 10 }}>↻</span>
+              <span style={{ color: '#fff', fontSize: 11 }}>↻</span>
             </div>
             <div style={{ position: 'absolute', top: -20, left: '50%', width: 2, height: 20, background: '#1dc48d', transform: 'translateX(-50%)', zIndex: 9 }} />
-            {/* Double-click hint for text */}
+            {/* Double-click/tap hint for text */}
             {el.type === 'text' && (
-              <div style={{ position: 'absolute', bottom: -20, left: '50%', transform: 'translateX(-50%)', fontSize: '0.6rem', color: '#1dc48d', whiteSpace: 'nowrap', background: 'white', padding: '1px 6px', borderRadius: 4, border: '1px solid #1dc48d' }}>
-                dbl-click to edit
+              <div style={{ position: 'absolute', bottom: -22, left: '50%', transform: 'translateX(-50%)', fontSize: '0.6rem', color: '#1dc48d', whiteSpace: 'nowrap', background: 'white', padding: '1px 6px', borderRadius: 4, border: '1px solid #1dc48d' }}>
+                dbl-tap to edit
               </div>
             )}
           </>
+        )}
+
+        {/* Inline text editor overlay */}
+        {isEditing && (
+          <InlineTextEditor
+            el={el}
+            scale={scale}
+            onDone={text => finishEdit(el.id, text)}
+          />
         )}
       </div>
     )
@@ -400,24 +525,11 @@ const CanvasEnhanced: React.FC<Props> = ({
 
   const sorted = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
 
-  // Outer wrapper must be exactly scaled size so it doesn't overflow parent
   const scaledW = Math.round(width  * scale)
   const scaledH = Math.round(height * scale)
 
   return (
     <div style={{ position: 'relative', width: scaledW, height: scaledH, overflow: 'hidden', flexShrink: 0 }}>
-      {/* Inline text editor rendered at scaled coords over the canvas */}
-      {editingId && (() => {
-        const el = elements.find(e => e.id === editingId)
-        return el ? (
-          <InlineTextEditor
-            el={el}
-            scale={scale}
-            onDone={text => finishEdit(editingId, text)}
-          />
-        ) : null
-      })()}
-
       {/* canvas-export-target: always full 1:1 size, used by PNG export */}
       <div
         ref={containerRef}
@@ -429,6 +541,7 @@ const CanvasEnhanced: React.FC<Props> = ({
           ...getBackgroundStyle()
         }}
         onClick={e => { if (e.target === e.currentTarget && !editingId) onSelect(null) }}
+        onTouchEnd={e => { if (e.target === e.currentTarget && !editingId) onSelect(null) }}
       >
         {sorted.map(renderElement)}
       </div>

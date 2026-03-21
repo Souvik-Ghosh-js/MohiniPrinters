@@ -53,6 +53,7 @@ export interface ElementProperties {
   // Shape
   fillOpacity?: number
   blendMode?: string
+  shapeType?: string  // 'rect'|'circle'|'triangle'|'diamond'|'star'|'pentagon'|'hexagon'|'arrow_right'|'cross'|'parallelogram'|'trapezoid'|'heart'
 }
 
 export interface CanvasElement {

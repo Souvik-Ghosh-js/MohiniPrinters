@@ -36,7 +36,7 @@ const Login: React.FC = () => {
             <div style={{ width: 40, height: 40, background: 'var(--brand)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ color: '#fff', fontSize: '1.25rem' }}>✦</span>
             </div>
-            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>MohiniPrinters</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>Mohini Design Hub</span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.5rem' }}>Welcome back</h1>
           <p style={{ color: 'var(--muted)' }}>Sign in to your account to continue</p>
