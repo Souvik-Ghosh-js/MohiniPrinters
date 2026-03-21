@@ -1,5 +1,8 @@
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
+// Strip any trailing slash so URL joins are clean
+const BASE = API.replace(/\/$/, '')
+
 export type AssetCategory = 'logos' | 'backgrounds' | 'schools' | 'templates' | 'elements'
 
 export interface AssetFile {
@@ -15,13 +18,25 @@ export interface AssetFile {
   previewUrl?: string
 }
 
+// Rebuild the file URL using VITE_API_URL as the base so it always
+// uses the correct protocol (https in prod), regardless of what the
+// backend returns. The backend constructs URLs with req.protocol which
+// is 'http' when sitting behind an SSL-terminating proxy.
+const rebuildUrl = (bucket: AssetCategory, filename: string): string =>
+  `${BASE}/uploads/${bucket}/${encodeURIComponent(filename)}`
+
 export const fetchAssets = async (bucket: AssetCategory, token?: string): Promise<AssetFile[]> => {
   const headers: Record<string,string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`${API}/api/assets/${bucket}`, { headers })
+  const res = await fetch(`${BASE}/api/assets/${bucket}`, { headers })
   if (!res.ok) throw new Error(`Failed to fetch ${bucket}`)
   const data = await res.json()
-  return data.files as AssetFile[]
+  // Override the URL from the server with one built from VITE_API_URL
+  const files = (data.files as AssetFile[]).map(f => ({
+    ...f,
+    url: rebuildUrl(bucket, f.name),
+  }))
+  return files
 }
 
 export const uploadAsset = async (
@@ -36,17 +51,26 @@ export const uploadAsset = async (
   if (meta.name) fd.append('displayName', meta.name)
   if (meta.category) fd.append('category', meta.category)
   if (meta.description) fd.append('description', meta.description)
-  const res = await fetch(`${API}/api/assets/${bucket}`, { method:'POST', headers, body:fd })
+  const res = await fetch(`${BASE}/api/assets/${bucket}`, { method:'POST', headers, body:fd })
   if (!res.ok) { const err = await res.json().catch(()=>({message:'Upload failed'})); throw new Error(err.message||'Upload failed') }
   const data = await res.json()
-  return data.file as AssetFile
+  const f = data.file as AssetFile
+  return { ...f, url: rebuildUrl(bucket, f.name) }
 }
 
 export const deleteAsset = async (bucket: AssetCategory, fileName: string, token?: string): Promise<void> => {
   const headers: Record<string,string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`${API}/api/assets/${bucket}/${encodeURIComponent(fileName)}`, { method:'DELETE', headers })
+  const res = await fetch(`${BASE}/api/assets/${bucket}/${encodeURIComponent(fileName)}`, { method:'DELETE', headers })
   if (!res.ok) throw new Error('Delete failed')
+}
+
+// Kept for backwards-compat; no longer needed but harmless
+export const fixProtocol = (url: string): string => {
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return url.replace(/^http:\/\//i, 'https://')
+  }
+  return url
 }
 
 export const loadJsonTemplate = async (url: string): Promise<any> => {

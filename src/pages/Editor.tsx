@@ -21,7 +21,7 @@ import BackgroundEditor from '../components/Editor/BackgroundEditor'
 import TemplateSelector from '../components/Editor/TemplateSelector'
 import LayersPanel from '../components/Editor/LayersPanel'
 import { useAssets } from '../hooks/useAssets'
-import { AssetFile } from '../utils/assetApi'
+import { AssetFile, fixProtocol } from '../utils/assetApi'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -356,16 +356,17 @@ const Editor: React.FC = () => {
       // If the user chose an admin template from the Dashboard, apply it now
       const routeState = location.state as { templateUrl?: string; templateName?: string } | null
       if (routeState?.templateUrl) {
+        const safeUrl = fixProtocol(routeState.templateUrl)
         try {
-          const tplRes = await fetch(routeState.templateUrl)
+          const tplRes = await fetch(safeUrl)
           if (tplRes.ok) {
             const contentType = tplRes.headers.get('content-type') || ''
-            if (contentType.includes('application/json') || routeState.templateUrl.endsWith('.json')) {
+            if (contentType.includes('application/json') || safeUrl.endsWith('.json')) {
               const json = await tplRes.json()
               applyFabricTemplate(json, dispatch, toast)
             } else {
               // It's an image — use it as background
-              dispatch(updateBackground({ type: 'image', image: { src: routeState.templateUrl, opacity: 100, blur: 0, scale: 1 } }))
+              dispatch(updateBackground({ type: 'image', image: { src: safeUrl, opacity: 100, blur: 0, scale: 1 } }))
               toast.success(`Template "${routeState.templateName || ''}" applied`)
             }
           }
