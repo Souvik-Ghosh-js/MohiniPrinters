@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect } from 'react'
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { CanvasElement, Background } from '../../types/canvas'
 
 interface Props {
@@ -97,29 +97,31 @@ const InlineTextEditor: React.FC<{
     return () => clearTimeout(t)
   }, [])
 
+  // InlineTextEditor is rendered INSIDE the element wrapper which is already
+  // at (el.x, el.y) in canvas coords and has rotation applied.
+  // So: position 0,0, fill 100%, NO rotation, NO scale multiplication.
   const style: React.CSSProperties = {
     position: 'absolute',
-    left: el.x * scale,
-    top: el.y * scale,
-    width: el.width * scale,
-    height: el.height * scale,
-    transform: `rotate(${el.rotation || 0}deg)`,
-    transformOrigin: 'center center',
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%',
+    // No transform — parent wrapper handles rotation + scale
     zIndex: 9999,
     resize: 'none',
-    border: '2px solid #1dc48d',
+    border: '2px solid var(--brand)',
     borderRadius: 2,
     padding: '4px 6px',
-    background: 'rgba(255,255,255,0.95)',
-    // Minimum 16px so iOS doesn't auto-zoom on focus
-    fontSize: `${Math.max((p.fontSize || 24) * scale, 16)}px`,
+    background: 'rgba(255,255,255,0.93)',
+    // font-size in canvas coords (parent is already scaled); min 16 so iOS doesn't zoom
+    fontSize: `${Math.max(p.fontSize || 24, 16)}px`,
     fontFamily: p.fontFamily || 'Arial',
     color: p.fill || '#000',
     fontWeight: p.fontWeight || '400',
     fontStyle: p.fontStyle || 'normal',
     textAlign: p.textAlign || 'center',
     lineHeight: p.lineHeight ? `${p.lineHeight}` : '1.4',
-    letterSpacing: p.letterSpacing ? `${p.letterSpacing * scale}px` : '0',
+    letterSpacing: p.letterSpacing ? `${p.letterSpacing}px` : '0',
     outline: 'none',
     cursor: 'text',
     overflow: 'hidden',
@@ -152,30 +154,64 @@ const InlineTextEditor: React.FC<{
   )
 }
 
+// ─── ALIGNMENT GUIDE HELPERS ─────────────────────────────────
+const SNAP_THRESHOLD = 6
+const computeAlignLines = (
+  els: CanvasElement[], movingId: string,
+  newX: number, newY: number, w: number, h: number
+) => {
+  const x: number[] = [], y: number[] = []
+  const left = newX, right = newX + w, cx = newX + w / 2
+  const top  = newY, bottom = newY + h, cy = newY + h / 2
+  els.forEach(o => {
+    if (o.id === movingId) return
+    const oL = o.x, oR = o.x + o.width,  oCx = o.x + o.width  / 2
+    const oT = o.y, oB = o.y + o.height, oCy = o.y + o.height / 2
+    ;[oL, oR, oCx].forEach(p => {
+      if (Math.abs(left-p)<SNAP_THRESHOLD||Math.abs(right-p)<SNAP_THRESHOLD||Math.abs(cx-p)<SNAP_THRESHOLD) x.push(p)
+    })
+    ;[oT, oB, oCy].forEach(p => {
+      if (Math.abs(top-p)<SNAP_THRESHOLD||Math.abs(bottom-p)<SNAP_THRESHOLD||Math.abs(cy-p)<SNAP_THRESHOLD) y.push(p)
+    })
+  })
+  return { x: [...new Set(x)], y: [...new Set(y)] }
+}
+
 // ─── MAIN CANVAS ─────────────────────────────────────────────
 const CanvasEnhanced: React.FC<Props> = ({
   elements, selectedId, onSelect, onUpdate, onCommit, width, height, zoom, background
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const elementsRef  = useRef(elements)
+  const [editingId, setEditingId]     = useState<string | null>(null)
+  const [alignLines, setAlignLines]   = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
   const scale = zoom / 100
 
-  const getBackgroundStyle = (): React.CSSProperties => {
+  useEffect(() => { elementsRef.current = elements }, [elements])
+
+  // Background is rendered as a separate overlay div so opacity doesn't bleed into elements
+  const getBgLayerStyle = (): React.CSSProperties => {
     if (!background) return { background: '#ffffff' }
-    if (background.type === 'solid') return { background: background.solid?.color || '#ffffff' }
+    const opacity = (() => {
+      if (background.type === 'solid')    return (background.solid?.opacity    ?? 100) / 100
+      if (background.type === 'gradient') return (background.gradient?.opacity ?? 100) / 100
+      if (background.type === 'image')    return (background.image?.opacity    ?? 100) / 100
+      return 1
+    })()
+    const base: React.CSSProperties = { position: 'absolute', inset: 0, zIndex: 0, opacity }
+    if (background.type === 'solid') {
+      return { ...base, background: background.solid?.color || '#ffffff' }
+    }
     if (background.type === 'gradient') {
-      const angle = background.gradient?.angle ?? 45
+      const angle  = background.gradient?.angle ?? 45
       const colors = background.gradient?.colors?.join(', ') || '#000, #fff'
-      return { background: `linear-gradient(${angle}deg, ${colors})` }
+      return { ...base, background: `linear-gradient(${angle}deg, ${colors})` }
     }
     if (background.type === 'image' && background.image?.src) {
-      return {
-        backgroundImage: `url(${background.image.src})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
+      const blur = background.image?.blur ?? 0
+      return { ...base, backgroundImage: `url(${background.image.src})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: blur ? `blur(${blur}px)` : undefined }
     }
-    return { background: '#ffffff' }
+    return { ...base, background: '#ffffff' }
   }
 
   const getFilter = (el: CanvasElement) => {
@@ -215,8 +251,28 @@ const CanvasEnhanced: React.FC<Props> = ({
       overflow: 'hidden',
       boxSizing: 'border-box',
     }
-    if (p.shadow) {
-      style.textShadow = `${p.shadow.offsetX||2}px ${p.shadow.offsetY||2}px ${p.shadow.blur||4}px ${p.shadow.color||'#00000066'}`
+    // Text effects (presets override manual shadow)
+    if (p.textEffect === 'carved') {
+      style.textShadow = '1px 1px 2px rgba(255,255,255,0.7), -1px -1px 1px rgba(0,0,0,0.45)'
+    } else if (p.textEffect === 'neon') {
+      const c = p.fill || '#0ff'
+      style.textShadow = `0 0 4px ${c}, 0 0 10px ${c}, 0 0 22px ${c}, 0 0 40px ${c}`
+    } else if (p.textEffect === '3d') {
+      style.textShadow = '1px 1px 0 #999, 2px 2px 0 #888, 3px 3px 0 #777, 4px 4px 0 #666'
+    } else if (p.textEffect === 'gold') {
+      style.background = 'linear-gradient(180deg, #f5d060, #c9860a, #f5d060)'
+      style.WebkitBackgroundClip = 'text'
+      style.WebkitTextFillColor = 'transparent'
+      style.textShadow = '1px 2px 4px rgba(0,0,0,0.3)'
+    } else if (p.shadow) {
+      const oX   = p.shadow.offsetX ?? 0
+      const oY   = p.shadow.offsetY ?? 0
+      const blur = p.shadow.blur    ?? 0
+      const color = p.shadow.color  || 'rgba(0,0,0,0.4)'
+      // Only apply shadow if at least one value is non-zero
+      if (oX !== 0 || oY !== 0 || blur !== 0) {
+        style.textShadow = `${oX}px ${oY}px ${blur}px ${color}`
+      }
     }
     if (p.stroke) {
       style.WebkitTextStroke = `${p.stroke.width}px ${p.stroke.color}`
@@ -230,13 +286,17 @@ const CanvasEnhanced: React.FC<Props> = ({
     return style
   }
 
-  const getElementWrapStyle = (el: CanvasElement): React.CSSProperties => ({
+  const getElementWrapStyle = (el: CanvasElement): React.CSSProperties => {
+    const flipX = el.properties.flipX ? -1 : 1
+    const flipY = el.properties.flipY ? -1 : 1
+    const flipStr = (flipX !== 1 || flipY !== 1) ? ` scale(${flipX},${flipY})` : ''
+    return ({
     position: 'absolute',
     left: el.x,
     top: el.y,
     width: el.width,
     height: el.height,
-    transform: `rotate(${el.rotation || 0}deg)`,
+    transform: `rotate(${el.rotation || 0}deg)${flipStr}`,
     transformOrigin: 'center center',
     opacity: (el.opacity ?? 100) / 100,
     zIndex: el.zIndex || 1,
@@ -244,10 +304,10 @@ const CanvasEnhanced: React.FC<Props> = ({
     visibility: el.visible === false ? 'hidden' : 'visible',
     mixBlendMode: (el.properties.blendMode as any) || 'normal',
     userSelect: 'none',
-    outline: selectedId === el.id ? '2px solid #1dc48d' : 'none',
-    boxShadow: selectedId === el.id ? '0 0 0 1px #1dc48d44' : undefined,
+    outline: selectedId === el.id ? '2px solid var(--brand)' : 'none',
+    boxShadow: selectedId === el.id ? '0 0 0 1px rgba(41,128,185,0.3)' : undefined,
     touchAction: 'none', // prevent scroll during drag on mobile
-  })
+  })}
 
   // ─── MOUSE DRAG / RESIZE / ROTATE ────────────────────────
   const onMouseDown = useCallback((
@@ -268,7 +328,9 @@ const CanvasEnhanced: React.FC<Props> = ({
       const dx = (ev.clientX - startX) / scale
       const dy = (ev.clientY - startY) / scale
       if (type === 'drag') {
-        onUpdate(el.id, { x: startElX + dx, y: startElY + dy })
+        const nx = startElX + dx, ny = startElY + dy
+        onUpdate(el.id, { x: nx, y: ny })
+        setAlignLines(computeAlignLines(elementsRef.current, el.id, nx, ny, el.width, el.height))
       } else if (type === 'resize') {
         if (handle === 'se') onUpdate(el.id, { width: Math.max(20, startW + dx), height: Math.max(20, startH + dy) })
         else if (handle === 'sw') onUpdate(el.id, { x: startElX + dx, width: Math.max(20, startW - dx), height: Math.max(20, startH + dy) })
@@ -289,6 +351,7 @@ const CanvasEnhanced: React.FC<Props> = ({
     }
     const onUp = () => {
       onCommit()
+      setAlignLines({ x: [], y: [] })
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
@@ -319,13 +382,16 @@ const CanvasEnhanced: React.FC<Props> = ({
       if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
         moved = true
         ev.preventDefault()
-        onUpdate(el.id, { x: startElX + dx, y: startElY + dy })
+        const nx = startElX + dx, ny = startElY + dy
+        onUpdate(el.id, { x: nx, y: ny })
+        setAlignLines(computeAlignLines(elementsRef.current, el.id, nx, ny, el.width, el.height))
       }
     }
 
     const onTouchEnd = (ev: TouchEvent) => {
       window.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('touchend', onTouchEnd)
+      setAlignLines({ x: [], y: [] })
 
       if (moved) {
         onCommit()
@@ -409,7 +475,7 @@ const CanvasEnhanced: React.FC<Props> = ({
     // Determine effective shape type
     const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
     const clip = SHAPE_CLIPS[st]
-    const bg = p.fill || '#1dc48d'
+    const bg = p.fill || '#2980b9'
     const strokeStyle = p.stroke ? `${p.stroke.width}px solid ${p.stroke.color}` : undefined
 
     if (st === 'heart') {
@@ -487,23 +553,17 @@ const CanvasEnhanced: React.FC<Props> = ({
                 key={h}
                 onMouseDown={e => onMouseDown(e, el, 'resize', h)}
                 onTouchStart={e => handleResizeTouchStart(e, el, h)}
-                style={{ position: 'absolute', ...handlePos[h], width: 12, height: 12, background: '#fff', border: '2px solid #1dc48d', borderRadius: 2, zIndex: 10, touchAction: 'none' }}
+                style={{ position: 'absolute', ...handlePos[h], width: 12, height: 12, background: '#fff', border: '2px solid var(--brand)', borderRadius: 2, zIndex: 10, touchAction: 'none' }}
               />
             ))}
             {/* Rotate handle */}
             <div
               onMouseDown={e => onMouseDown(e, el, 'rotate')}
-              style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, background: '#1dc48d', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
+              style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, background: 'var(--brand)', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
             >
               <span style={{ color: '#fff', fontSize: 11 }}>↻</span>
             </div>
-            <div style={{ position: 'absolute', top: -20, left: '50%', width: 2, height: 20, background: '#1dc48d', transform: 'translateX(-50%)', zIndex: 9 }} />
-            {/* Double-click/tap hint for text */}
-            {el.type === 'text' && (
-              <div style={{ position: 'absolute', bottom: -22, left: '50%', transform: 'translateX(-50%)', fontSize: '0.6rem', color: '#1dc48d', whiteSpace: 'nowrap', background: 'white', padding: '1px 6px', borderRadius: 4, border: '1px solid #1dc48d' }}>
-                dbl-tap to edit
-              </div>
-            )}
+            <div style={{ position: 'absolute', top: -20, left: '50%', width: 2, height: 20, background: 'var(--brand)', transform: 'translateX(-50%)', zIndex: 9 }} />
           </>
         )}
 
@@ -533,13 +593,23 @@ const CanvasEnhanced: React.FC<Props> = ({
         style={{
           width, height, position: 'absolute', top: 0, left: 0,
           transform: `scale(${scale})`, transformOrigin: 'top left',
-          cursor: 'default', overflow: 'hidden',
-          ...getBackgroundStyle()
+          cursor: 'default', overflow: 'hidden', background: '#fff',
         }}
         onClick={e => { if (e.target === e.currentTarget && !editingId) onSelect(null) }}
         onTouchEnd={e => { if (e.target === e.currentTarget && !editingId) onSelect(null) }}
       >
+        {/* Background layer — isolated so opacity doesn't bleed into elements */}
+        <div style={getBgLayerStyle()} />
+
         {sorted.map(renderElement)}
+
+        {/* Alignment guide lines */}
+        {alignLines.x.map((x, i) => (
+          <div key={`ax${i}`} style={{ position: 'absolute', left: x, top: 0, width: 1, height: '100%', background: '#e53e3e', opacity: 0.75, zIndex: 99999, pointerEvents: 'none' }} />
+        ))}
+        {alignLines.y.map((y, i) => (
+          <div key={`ay${i}`} style={{ position: 'absolute', left: 0, top: y, width: '100%', height: 1, background: '#e53e3e', opacity: 0.75, zIndex: 99999, pointerEvents: 'none' }} />
+        ))}
       </div>
     </div>
   )

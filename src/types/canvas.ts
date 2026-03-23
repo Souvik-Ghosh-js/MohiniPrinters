@@ -54,6 +54,13 @@ export interface ElementProperties {
   fillOpacity?: number
   blendMode?: string
   shapeType?: string  // 'rect'|'circle'|'triangle'|'diamond'|'star'|'pentagon'|'hexagon'|'arrow_right'|'cross'|'parallelogram'|'trapezoid'|'heart'
+
+  // Transform
+  flipX?: boolean
+  flipY?: boolean
+
+  // Text effect preset
+  textEffect?: 'carved' | 'neon' | '3d' | 'gold'
 }
 
 export interface CanvasElement {

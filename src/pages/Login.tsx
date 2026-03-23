@@ -29,13 +29,11 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f0fdf7 0%, #e8f4ff 100%)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #EBF4F6 0%, #d4eaf0 50%, #e8f4fd 100%)' }}>
       <div className="auth-wrapper" style={{ width: '100%', maxWidth: '420px', padding: '0 1rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
-            <div style={{ width: 40, height: 40, background: 'var(--brand)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: '#fff', fontSize: '1.25rem' }}>✦</span>
-            </div>
+            <img src="/assets/mohini.png" alt="Mohini" style={{ height: 44, objectFit: 'contain' }} />
             <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>Mohini Design Hub</span>
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)', marginBottom: '0.5rem' }}>Welcome back</h1>

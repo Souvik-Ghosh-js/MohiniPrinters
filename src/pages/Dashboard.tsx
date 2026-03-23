@@ -102,35 +102,40 @@ const Dashboard: React.FC = () => {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
       {/* Header */}
-      <header style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '0 2rem', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 var(--border)' }}>
+      <header style={{ background: 'var(--corporate)', padding: '0 2rem', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height: 44, objectFit: 'contain' }} />
-          <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem' }}>Mohini Design Hub</span>
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height: 46, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff' }}>Mohini Design Hub</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span className="header-greeting" style={{ color: 'var(--muted)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
+          <span className="header-greeting" style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
           {user?.is_admin && (
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/admin')}>
+            <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => navigate('/admin')}>
               <Settings size={14} /> Admin
             </button>
           )}
-          <button className="btn btn-ghost btn-sm" onClick={() => { dispatch(logout()); navigate('/login') }}>
+          <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => { dispatch(logout()); navigate('/login') }}>
             <LogOut size={14} /> Sign out
           </button>
         </div>
       </header>
 
-      <main style={{ maxWidth: 1400, margin: '0 auto', padding: '2.5rem 2rem' }}>
-        {/* Hero */}
-        <div className="dashboard-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
+      {/* Hero Banner */}
+      <div style={{ background: 'linear-gradient(135deg, var(--corporate) 0%, var(--corporate-light) 60%, #1a5276 100%)', padding: '2.5rem 2rem', color: '#fff' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem' }}>Your Designs</h1>
-            <p style={{ color: 'var(--muted)' }}>{projects.length} project{projects.length !== 1 ? 's' : ''} — create stunning graphics for any platform</p>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.4rem', color: '#fff' }}>Your Designs</h1>
+            <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem' }}>{projects.length} project{projects.length !== 1 ? 's' : ''} — create stunning graphics for any platform</p>
           </div>
-          <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '0.9375rem' }} onClick={openModal}>
+          <button onClick={openModal} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', fontSize: '0.9375rem', fontWeight: 700, background: 'var(--gold)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: '0 4px 14px rgba(201,162,39,0.45)', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#b8920f'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--gold)'; e.currentTarget.style.transform = '' }}>
             <Plus size={18} /> New Design
           </button>
         </div>
+      </div>
+
+      <main style={{ maxWidth: 1400, margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Projects Grid */}
         {loading ? (
@@ -150,7 +155,7 @@ const Dashboard: React.FC = () => {
                 onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
               >
-                <div style={{ width: '100%', height: 150, background: 'linear-gradient(135deg, #f0fdf7, #e8f4ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <div style={{ width: '100%', height: 150, background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                   {p.thumbnail_url
                     ? <img src={p.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <Layout size={40} color="#cbd5e1" />
@@ -200,7 +205,7 @@ const Dashboard: React.FC = () => {
                         onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                         onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
                       >
-                        <div style={{ width: '100%', height: 130, background: 'linear-gradient(135deg, #f0fdf7, #e8f4ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        <div style={{ width: '100%', height: 130, background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                           {(tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i)) ? (
                             <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (

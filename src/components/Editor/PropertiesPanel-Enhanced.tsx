@@ -133,8 +133,25 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
           <Field label="Height"><input style={inputStyle} type="number" value={Math.round(element.height)} onChange={e => onUpdate({ height: Math.max(1, +e.target.value) })} /></Field>
         </Row2>
         <div style={{ marginTop: 8 }}>
-          <SliderField label="Rotation" value={element.rotation} min={0} max={360} onChange={v => onUpdate({ rotation: v })} unit="°" />
+          <SliderField label="Rotation" value={element.rotation} min={-180} max={180} onChange={v => onUpdate({ rotation: v })} unit="°" />
           <SliderField label="Opacity" value={element.opacity} min={0} max={100} onChange={v => onUpdate({ opacity: v })} unit="%" />
+        </div>
+        {/* Flip buttons */}
+        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+          <button
+            className={`toolbar-btn${p.flipX ? ' active' : ''}`}
+            style={{ flex: 1, fontSize: '0.72rem', fontWeight: 600 }}
+            title="Flip Horizontal"
+            onClick={() => up('flipX', !p.flipX)}>
+            ↔ Flip H
+          </button>
+          <button
+            className={`toolbar-btn${p.flipY ? ' active' : ''}`}
+            style={{ flex: 1, fontSize: '0.72rem', fontWeight: 600 }}
+            title="Flip Vertical"
+            onClick={() => up('flipY', !p.flipY)}>
+            ↕ Flip V
+          </button>
         </div>
       </Section>
 
@@ -267,6 +284,26 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
             <div style={{ marginTop: 8 }}>
               <SliderField label="Curve Amount (neg = down)" value={p.curveAmount ?? 50} min={-100} max={100} onChange={v => up('curveAmount', v)} />
             </div>
+          )}
+        </Section>
+
+        <Section title="Text Effect">
+          <Field label="Preset Effect">
+            <select style={inputStyle} value={p.textEffect || 'none'} onChange={e => up('textEffect', e.target.value === 'none' ? undefined : e.target.value)}>
+              <option value="none">None</option>
+              <option value="carved">Carved / Embossed</option>
+              <option value="neon">Neon Glow</option>
+              <option value="3d">3D Shadow</option>
+              <option value="gold">Gold Metallic</option>
+            </select>
+          </Field>
+          {p.textEffect && (
+            <p style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 4 }}>
+              {p.textEffect === 'carved' && 'Best on dark background. Keep shadow values at 0.'}
+              {p.textEffect === 'neon' && 'Uses text color as glow color.'}
+              {p.textEffect === '3d' && 'Adds a grey layered depth effect.'}
+              {p.textEffect === 'gold' && 'Overrides text color with gold gradient.'}
+            </p>
           )}
         </Section>
 

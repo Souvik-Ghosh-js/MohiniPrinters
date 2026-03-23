@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   ArrowLeft, Save, Undo, Redo, ZoomIn, ZoomOut, Download,
   Type, Image as ImageIcon, Layers, Layout, Sliders,
-  AlignCenter, Upload, FileJson, RefreshCw, Filter
+  AlignCenter, Upload, FileJson, RefreshCw, Filter, Maximize2
 } from 'lucide-react'
 import { RootState } from '../store'
 import {
@@ -25,7 +25,7 @@ import { AssetFile, fixProtocol } from '../utils/assetApi'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
-type LeftTab = 'templates' | 'assets' | 'add' | 'layers'
+type LeftTab = 'templates' | 'assets' | 'add' | 'layers' | 'size'
 type RightTab = 'properties' | 'background'
 type AssetSubTab = 'logos' | 'backgrounds' | 'elements' | 'schools'
 
@@ -182,10 +182,7 @@ const ServerTemplatePanel: React.FC<{
 
   return (
     <div style={{ padding: '0 0 1rem' }}>
-      {/* Size presets */}
-      <TemplateSelector currentW={currentW} currentH={currentH} onSelectTemplate={onSizeChange} />
-
-      <div style={{ margin: '4px 0 8px', borderTop: '1px solid var(--border)', padding: '10px 16px 0' }}>
+      <div style={{ margin: '4px 0 8px', padding: '10px 16px 0' }}>
         <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', marginBottom: 6 }}>
           Server Templates
           <button onClick={load} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)' }}><RefreshCw size={11}/></button>
@@ -299,7 +296,8 @@ const Editor: React.FC = () => {
   const [rightTab, setRightTab] = useState<RightTab>('properties')
   const [imageUrl, setImageUrl] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef    = useRef<HTMLInputElement>(null)
+  const imageUploadRef  = useRef<HTMLInputElement>(null)
 
   const selectedElement = elements.find(e => e.id === selectedElementId) || null
 
@@ -408,9 +406,21 @@ const Editor: React.FC = () => {
     const el: CanvasElement = {
       id: makeId(), type: 'shape', x: width/2-75, y: height/2-75,
       width: 150, height: 150, rotation: 0, opacity: 100, zIndex: nextZ(), locked: false, visible: true,
-      properties: { fill: '#1dc48d', borderRadius: shapeType==='circle'?999:0, shapeType, blendMode: 'normal' }
+      properties: { fill: '#2980b9', borderRadius: shapeType==='circle'?999:0, shapeType, blendMode: 'normal' }
     }
     dispatch(addElement(el)); setRightTab('properties')
+  }
+
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>, onDone?: () => void) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const src = ev.target?.result as string
+      if (src) { addImageEl(src); onDone?.() }
+    }
+    reader.readAsDataURL(file)
+    if (e.target) e.target.value = ''
   }
 
   const addImageEl = (src: string) => {
@@ -686,18 +696,24 @@ const Editor: React.FC = () => {
           </div>
         </div>
         <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image URL</div>
-          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:showImageInput?6:0 }} onClick={()=>setShowImageInput(v=>!v)}>
-            <ImageIcon size={14}/> Add Image URL
+          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image</div>
+          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start' }}
+            onClick={()=>{ const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=(ev)=>{ handleImageFileUpload(ev as any, ()=>setMobilePanel(null)) }; inp.click() }}>
+            <Upload size={14}/> Upload Image from Device
           </button>
-          {showImageInput && (
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              <input className="input" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://…" style={{ fontSize:'0.8125rem' }}
-                onKeyDown={e=>{ if(e.key==='Enter'&&imageUrl.trim()){ addImageEl(imageUrl); setImageUrl(''); setShowImageInput(false); setMobilePanel(null) }}}/>
-              <button className="btn btn-primary btn-sm" onClick={()=>{ if(imageUrl.trim()){ addImageEl(imageUrl); setImageUrl(''); setShowImageInput(false); setMobilePanel(null) }}} disabled={!imageUrl.trim()}>Add to Canvas</button>
-            </div>
-          )}
         </div>
+      </div>
+    )
+    if (panel === 'size') return (
+      <div style={{ padding:'12px 8px' }}>
+        <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Page Size</div>
+        <TemplateSelector currentW={width} currentH={height} onSelectTemplate={(w,h,name)=>{
+          dispatch(setCanvasSize({width:w,height:h}))
+          const availW=window.innerWidth-24, availH=window.innerHeight-200
+          dispatch(setZoom(Math.max(20,Math.floor(Math.min((availW/w)*100,(availH/h)*100,60)/5)*5)))
+          toast.success(`Canvas: ${name}`)
+          setMobilePanel(null)
+        }}/>
       </div>
     )
     if (panel === 'layers') return (
@@ -748,21 +764,21 @@ const Editor: React.FC = () => {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#e8eaf0', overflow:'hidden', position:'relative' }}>
 
       {/* Mobile Top Bar */}
-      <header style={{ height:48, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200 }}>
-        <button className="btn btn-ghost btn-icon" style={{ padding:6 }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
+      <header style={{ height:48, background:'var(--corporate)', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.18)' }}>
+        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:7, padding:7, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain', filter:'brightness(0) invert(1)' }} />
         </div>
-        <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
-        <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
-        <button className="btn btn-primary btn-sm" style={{ padding:'6px 12px', fontSize:'0.8125rem' }} onClick={()=>saveProject(true)} disabled={saving}>
+        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
+        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
+        <button style={{ background:'var(--gold)', border:'none', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:700, display:'flex', alignItems:'center', gap:5 }} onClick={()=>saveProject(true)} disabled={saving}>
           {saving?'…':<><Save size={13}/> Save</>}
         </button>
       </header>
 
       {/* Canvas fills remaining space - centered both ways */}
-      <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 12px', background:'#e8eaf0' }}>
+      <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 12px', background:'var(--bg)' }}>
         <div style={{ position:'relative', flexShrink: 0 }}>
           <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
             <CanvasEnhanced
@@ -822,12 +838,13 @@ const Editor: React.FC = () => {
         {/* Tool buttons row */}
         <div style={{ height:58, display:'flex', alignItems:'center' }}>
           {([
-            ['templates', <Layout size={19}/>,    'Templates'],
-            ['assets',    <ImageIcon size={19}/>, 'Assets'],
-            ['add',       <AlignCenter size={19}/>,'Add'],
-            ['layers',    <Layers size={19}/>,    'Layers'],
-            ['properties',<Sliders size={19}/>,   'Edit'],
-            ['background',<Filter size={19}/>,    'BG'],
+            ['templates', <Layout size={18}/>,     'Templates'],
+            ['assets',    <ImageIcon size={18}/>,  'Assets'],
+            ['add',       <AlignCenter size={18}/>,'Add'],
+            ['size',      <Maximize2 size={18}/>,  'Size'],
+            ['layers',    <Layers size={18}/>,     'Layers'],
+            ['properties',<Sliders size={18}/>,    'Edit'],
+            ['background',<Filter size={18}/>,     'BG'],
           ] as [LeftTab|RightTab, React.ReactNode, string][]).map(([tab, icon, label]) => (
             <button key={tab} onClick={()=>openMobilePanel(tab)}
               style={{
@@ -868,36 +885,36 @@ const Editor: React.FC = () => {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'var(--bg)', overflow:'hidden' }}>
 
       {/* ─── TOP TOOLBAR ─── */}
-      <header style={{ height:56, background:'#fff', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100, position:'relative' }}>
-        <button className="btn btn-ghost btn-icon" onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
-        <div style={{ width:1, height:28, background:'var(--border)' }}/>
+      <header style={{ height:56, background:'var(--corporate)', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100, position:'relative', boxShadow:'0 2px 10px rgba(0,0,0,0.18)' }}>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:7, padding:8, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
+        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
         <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveProject(false)}
-          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'var(--text)', background:'transparent', outline:'none', minWidth:120, maxWidth:200 }}/>
-        <div style={{ width:1, height:28, background:'var(--border)' }}/>
-        <button className="toolbar-btn" onClick={()=>dispatch(undo())} disabled={historyIndex<=0} title="Undo"><Undo size={16}/></button>
-        <button className="toolbar-btn" onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1} title="Redo"><Redo size={16}/></button>
-        <div style={{ width:1, height:28, background:'var(--border)' }}/>
-        <button className="toolbar-btn" onClick={()=>dispatch(setZoom(Math.max(10,zoom-10)))}><ZoomOut size={16}/></button>
-        <span style={{ fontSize:'0.8125rem', fontWeight:600, color:'var(--muted)', minWidth:40, textAlign:'center' }}>{zoom}%</span>
-        <button className="toolbar-btn" onClick={()=>dispatch(setZoom(Math.min(200,zoom+10)))}><ZoomIn size={16}/></button>
-        <select value={zoom} onChange={e=>dispatch(setZoom(+e.target.value))} style={{ fontSize:'0.75rem', border:'1px solid var(--border)', borderRadius:6, padding:'4px 6px', background:'#fff', cursor:'pointer' }}>
-          {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z}>{z}%</option>)}
+          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'#fff', background:'transparent', outline:'none', minWidth:120, maxWidth:200 }}/>
+        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:32, height:32, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0} title="Undo"><Undo size={16}/></button>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:32, height:32, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1} title="Redo"><Redo size={16}/></button>
+        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.max(10,zoom-10)))}><ZoomOut size={15}/></button>
+        <span style={{ fontSize:'0.8rem', fontWeight:700, color:'rgba(255,255,255,0.9)', minWidth:38, textAlign:'center' }}>{zoom}%</span>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.min(200,zoom+10)))}><ZoomIn size={15}/></button>
+        <select value={zoom} onChange={e=>dispatch(setZoom(+e.target.value))} style={{ fontSize:'0.75rem', border:'1px solid rgba(255,255,255,0.25)', borderRadius:6, padding:'4px 6px', background:'rgba(255,255,255,0.1)', color:'#fff', cursor:'pointer' }}>
+          {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z} style={{ background:'#2C3E50' }}>{z}%</option>)}
         </select>
 
         {/* Mohini Logo — centered absolutely */}
         <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain', filter:'brightness(0) invert(1)' }} />
         </div>
 
         <div style={{ flex:1 }}/>
-        <span style={{ fontSize:'0.7rem', color:'var(--muted)', background:'var(--bg)', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
-        <button className="btn btn-ghost btn-sm" onClick={exportAsJson} title="Export as JSON template">
+        <span style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.6)', background:'rgba(255,255,255,0.1)', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsJson} title="Export as JSON template">
           <FileJson size={14}/> JSON
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={exportAsPng} title="Export as PNG">
+        <button style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsPng} title="Export as PNG">
           <Download size={14}/> PNG
         </button>
-        <button className="btn btn-primary btn-sm" onClick={()=>saveProject(true)} disabled={saving}>
+        <button style={{ background:'var(--gold)', border:'none', borderRadius:7, padding:'6px 14px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:700, display:'flex', alignItems:'center', gap:5, boxShadow:'0 2px 8px rgba(201,162,39,0.4)' }} onClick={()=>saveProject(true)} disabled={saving}>
           <Save size={14}/> {saving?'Saving…':'Save'}
         </button>
       </header>
@@ -908,10 +925,11 @@ const Editor: React.FC = () => {
         <aside style={{ width:248, background:'#fff', borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column', flexShrink:0, overflow:'hidden' }}>
           <div style={{ display:'flex', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             {([
-              ['templates', <Layout size={12}/>,    'Templates'],
-              ['assets',    <ImageIcon size={12}/>, 'Assets'],
+              ['templates', <Layout size={12}/>,     'Templates'],
+              ['assets',    <ImageIcon size={12}/>,  'Assets'],
               ['add',       <AlignCenter size={12}/>,'Add'],
-              ['layers',    <Layers size={12}/>,    'Layers'],
+              ['size',      <Maximize2 size={12}/>,  'Size'],
+              ['layers',    <Layers size={12}/>,     'Layers'],
             ] as const).map(([tab, icon, label]) => (
               <button key={tab}
                 className={`sidebar-nav-item${leftTab===tab?' active':''}`}
@@ -982,18 +1000,23 @@ const Editor: React.FC = () => {
                   </div>
                 </div>
                 <div style={{ marginBottom:12 }}>
-                  <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image URL</div>
-                  <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:showImageInput?6:0 }} onClick={()=>setShowImageInput(v=>!v)}>
-                    <ImageIcon size={14}/> Add Image URL
+                  <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image</div>
+                  <input ref={imageUploadRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e => handleImageFileUpload(e)} />
+                  <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start' }} onClick={()=>imageUploadRef.current?.click()}>
+                    <Upload size={14}/> Upload Image from Device
                   </button>
-                  {showImageInput && (
-                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                      <input className="input" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://…" style={{ fontSize:'0.8125rem' }}
-                        onKeyDown={e=>e.key==='Enter'&&imageUrl.trim()&&(addImageEl(imageUrl),setImageUrl(''),setShowImageInput(false))}/>
-                      <button className="btn btn-primary btn-sm" onClick={()=>{if(imageUrl.trim()){addImageEl(imageUrl);setImageUrl('');setShowImageInput(false)}}} disabled={!imageUrl.trim()}>Add to Canvas</button>
-                    </div>
-                  )}
                 </div>
+              </div>
+            )}
+            {leftTab==='size' && (
+              <div style={{ padding:'12px 8px' }}>
+                <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Page Size</div>
+                <TemplateSelector currentW={width} currentH={height} onSelectTemplate={(w,h,name)=>{
+                  dispatch(setCanvasSize({width:w,height:h}))
+                  const availW = window.innerWidth-(248+256+80), availH = window.innerHeight-(56+80)
+                  dispatch(setZoom(Math.max(25,Math.floor(Math.min((availW/w)*100,(availH/h)*100,90)/5)*5)))
+                  toast.success(`Canvas: ${name}`)
+                }}/>
               </div>
             )}
             {leftTab==='layers' && (
@@ -1009,7 +1032,7 @@ const Editor: React.FC = () => {
         </aside>
 
         {/* ─── CANVAS ─── */}
-        <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'32px', background:'#e8eaf0', position:'relative' }}>
+        <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'32px', background:'var(--bg)', position:'relative' }}>
           <div style={{ position:'relative', flexShrink: 0 }}>
             <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
               <CanvasEnhanced
