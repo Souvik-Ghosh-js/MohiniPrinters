@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import html2canvas from 'html2canvas'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import axios from 'axios'
@@ -32,6 +31,131 @@ type RightTab = 'properties' | 'background'
 type AssetSubTab = 'logos' | 'backgrounds' | 'elements' | 'schools'
 
 let saveTimer: ReturnType<typeof setTimeout>
+
+// ─── THUMBNAIL GENERATOR (Canvas 2D, no DOM manipulation) ─────
+const THUMB_POLYS: Record<string, [number,number][]> = {
+  triangle:     [[50,0],[0,100],[100,100]],
+  diamond:      [[50,0],[100,50],[50,100],[0,50]],
+  star:         [[50,0],[61,35],[98,35],[68,57],[79,91],[50,70],[21,91],[32,57],[2,35],[39,35]],
+  pentagon:     [[50,0],[100,38],[82,100],[18,100],[0,38]],
+  hexagon:      [[25,0],[75,0],[100,50],[75,100],[25,100],[0,50]],
+  arrow_right:  [[0,20],[60,20],[60,0],[100,50],[60,100],[60,80],[0,80]],
+  arrow_up:     [[50,0],[100,60],[80,60],[80,100],[20,100],[20,60],[0,60]],
+  cross:        [[10,40],[40,40],[40,10],[60,10],[60,40],[90,40],[90,60],[60,60],[60,90],[40,90],[40,60],[10,60]],
+  parallelogram:[[25,0],[100,0],[75,100],[0,100]],
+  trapezoid:    [[20,0],[80,0],[100,100],[0,100]],
+}
+
+const generateThumbnailBlob = async (
+  elements: CanvasElement[], background: Background, cw: number, ch: number
+): Promise<Blob | null> => {
+  const THUMB_W = 600
+  const scale = THUMB_W / cw
+  const THUMB_H = Math.round(ch * scale)
+  const cvs = document.createElement('canvas')
+  cvs.width = THUMB_W; cvs.height = THUMB_H
+  const ctx = cvs.getContext('2d')
+  if (!ctx) return null
+
+  // Draw background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, THUMB_W, THUMB_H)
+  if (background.type === 'solid' && background.solid) {
+    ctx.save()
+    ctx.globalAlpha = (background.solid.opacity ?? 100) / 100
+    ctx.fillStyle = background.solid.color || '#fff'
+    ctx.fillRect(0, 0, THUMB_W, THUMB_H)
+    ctx.restore()
+  } else if (background.type === 'gradient' && background.gradient) {
+    const g = background.gradient
+    const angle = ((g.angle ?? 135) * Math.PI) / 180
+    const x1 = THUMB_W/2 - Math.cos(angle)*THUMB_W/2, y1 = THUMB_H/2 - Math.sin(angle)*THUMB_H/2
+    const x2 = THUMB_W/2 + Math.cos(angle)*THUMB_W/2, y2 = THUMB_H/2 + Math.sin(angle)*THUMB_H/2
+    const grad = ctx.createLinearGradient(x1,y1,x2,y2)
+    const colors = g.colors || ['#ccc','#888']
+    colors.forEach((c,i) => grad.addColorStop(i/(colors.length-1||1), c))
+    ctx.save(); ctx.globalAlpha = (g.opacity??100)/100; ctx.fillStyle = grad; ctx.fillRect(0,0,THUMB_W,THUMB_H); ctx.restore()
+  } else if (background.type === 'image' && background.image?.src) {
+    await new Promise<void>(res => {
+      const img = new Image(); img.crossOrigin='anonymous'
+      img.onload = () => { ctx.drawImage(img,0,0,THUMB_W,THUMB_H); res() }
+      img.onerror = () => res()
+      img.src = background.image!.src
+    })
+  }
+
+  // Draw elements
+  const sorted = [...elements].filter(e => e.visible !== false).sort((a,b)=>(a.zIndex||0)-(b.zIndex||0))
+  for (const el of sorted) {
+    ctx.save()
+    ctx.globalAlpha = (el.opacity??100)/100
+    const x=el.x*scale, y=el.y*scale, w=el.width*scale, h=el.height*scale
+    // Apply rotation around element center
+    if (el.rotation) {
+      ctx.translate(x+w/2, y+h/2)
+      ctx.rotate((el.rotation*Math.PI)/180)
+      ctx.translate(-(x+w/2), -(y+h/2))
+    }
+    const p = el.properties
+
+    if (el.type === 'image' && p.src) {
+      await new Promise<void>(res => {
+        const img = new Image(); img.crossOrigin='anonymous'
+        img.onload = () => {
+          ctx.save()
+          if (p.borderRadius) {
+            ctx.beginPath(); ctx.roundRect(x,y,w,h,p.borderRadius*scale); ctx.clip()
+          }
+          ctx.drawImage(img,x,y,w,h); ctx.restore(); res()
+        }
+        img.onerror = () => res()
+        img.src = p.src || ''
+      })
+    } else if (el.type === 'text') {
+      const fs = (p.fontSize||24)*scale
+      ctx.font = `${p.fontStyle||'normal'} ${p.fontWeight||'400'} ${fs}px ${p.fontFamily||'Arial'}`
+      ctx.fillStyle = p.fill || '#000000'
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = (p.textAlign as CanvasTextAlign)||'left'
+      const tx = p.textAlign==='center' ? x+w/2 : p.textAlign==='right' ? x+w : x
+      const lines = (p.text||'').split('\n')
+      const lh = fs*(p.lineHeight||1.4)
+      lines.forEach((line,i) => ctx.fillText(line, tx, y+h/2+(i-(lines.length-1)/2)*lh, w))
+    } else if (el.type === 'shape') {
+      const st = p.shapeType||(p.borderRadius===999?'circle':'rect')
+      ctx.fillStyle = p.fill||'#2980b9'
+      ctx.beginPath()
+      if (st==='circle') {
+        ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2)
+      } else if (st==='rect') {
+        const r = Math.min((p.borderRadius||0)*scale, w/2, h/2)
+        ctx.roundRect(x,y,w,h,r)
+      } else if (st==='heart') {
+        ctx.moveTo(x+w/2,y+h*0.85)
+        ctx.bezierCurveTo(x+w*0.1,y+h*0.6,x,y+h*0.35,x+w/2,y+h*0.25)
+        ctx.bezierCurveTo(x+w,y+h*0.35,x+w*0.9,y+h*0.6,x+w/2,y+h*0.85)
+      } else {
+        const poly = THUMB_POLYS[st]
+        if (poly) {
+          poly.forEach(([px,py],i) => {
+            const vx=x+w*px/100, vy=y+h*py/100
+            i===0 ? ctx.moveTo(vx,vy) : ctx.lineTo(vx,vy)
+          })
+          ctx.closePath()
+        } else {
+          ctx.rect(x,y,w,h)
+        }
+      }
+      ctx.fill()
+      if (p.stroke?.width && p.stroke?.color) {
+        ctx.strokeStyle=p.stroke.color; ctx.lineWidth=p.stroke.width*scale; ctx.stroke()
+      }
+    }
+    ctx.restore()
+  }
+
+  return new Promise(res => cvs.toBlob(b => res(b), 'image/jpeg', 0.88))
+}
 
 // ─── FABRIC JSON → OUR ELEMENT FORMAT ────────────────────────
 const fabricObjectToElement = (obj: any, idx: number): CanvasElement | null => {
@@ -408,42 +532,13 @@ const Editor: React.FC = () => {
       }, { headers })
       if (showToast) toast.success('Saved!')
 
-      // Upload thumbnail — same capture logic as exportAsPng, just smaller scale
-      try {
-        const el = document.querySelector('.canvas-export-target') as HTMLElement | null
-        if (el) {
-          dispatch(selectElement(null))
-          await new Promise(r => setTimeout(r, 80)) // let React deselect before capture
-          const prevTransform = el.style.transform
-          const prevW = el.style.width
-          const prevH = el.style.height
-          el.style.transform = 'scale(1)'
-          el.style.width = `${width}px`
-          el.style.height = `${height}px`
-          const cvs = await html2canvas(el, {
-            scale: 0.5,
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            width,
-            height,
-            windowWidth: width,
-            windowHeight: height,
-            x: 0,
-            y: 0,
-          })
-          el.style.transform = prevTransform
-          el.style.width = prevW
-          el.style.height = prevH
-          cvs.toBlob(async (blob) => {
-            if (!blob) return
-            const fd = new FormData()
-            fd.append('thumbnail', blob, 'thumb.jpg')
-            await axios.post(`${API}/api/projects/${projectId}/thumbnail`, fd, { headers })
-          }, 'image/jpeg', 0.85)
-        }
-      } catch { /* thumbnail is best-effort */ }
+      // Upload thumbnail — render via Canvas 2D (no DOM mutation, no visual flash)
+      generateThumbnailBlob(elements, background, width, height).then(async blob => {
+        if (!blob) return
+        const fd = new FormData()
+        fd.append('thumbnail', blob, 'thumb.jpg')
+        await axios.post(`${API}/api/projects/${projectId}/thumbnail`, fd, { headers }).catch(() => {})
+      }).catch(() => {})
     } catch { if (showToast) toast.error('Save failed') }
     finally { setSaving(false) }
   }
