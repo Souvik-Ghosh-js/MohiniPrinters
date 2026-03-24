@@ -459,14 +459,14 @@ const CanvasEnhanced: React.FC<Props> = ({
   // ─── RESIZE HANDLES ──────────────────────────────────────
   const handles = ['nw','n','ne','w','e','sw','s','se']
   const handlePos: Record<string, React.CSSProperties> = {
-    nw: { top: -5, left: -5, cursor: 'nw-resize' },
-    n:  { top: -5, left: '50%', transform: 'translateX(-50%)', cursor: 'n-resize' },
-    ne: { top: -5, right: -5, cursor: 'ne-resize' },
-    w:  { top: '50%', left: -5, transform: 'translateY(-50%)', cursor: 'w-resize' },
-    e:  { top: '50%', right: -5, transform: 'translateY(-50%)', cursor: 'e-resize' },
-    sw: { bottom: -5, left: -5, cursor: 'sw-resize' },
-    s:  { bottom: -5, left: '50%', transform: 'translateX(-50%)', cursor: 's-resize' },
-    se: { bottom: -5, right: -5, cursor: 'se-resize' },
+    nw: { top: -10, left: -10, cursor: 'nw-resize' },
+    n:  { top: -10, left: '50%', transform: 'translateX(-50%)', cursor: 'n-resize' },
+    ne: { top: -10, right: -10, cursor: 'ne-resize' },
+    w:  { top: '50%', left: -10, transform: 'translateY(-50%)', cursor: 'w-resize' },
+    e:  { top: '50%', right: -10, transform: 'translateY(-50%)', cursor: 'e-resize' },
+    sw: { bottom: -10, left: -10, cursor: 'sw-resize' },
+    s:  { bottom: -10, left: '50%', transform: 'translateX(-50%)', cursor: 's-resize' },
+    se: { bottom: -10, right: -10, cursor: 'se-resize' },
   }
 
   // ─── RENDER SHAPE ─────────────────────────────────────────
@@ -553,17 +553,17 @@ const CanvasEnhanced: React.FC<Props> = ({
                 key={h}
                 onMouseDown={e => onMouseDown(e, el, 'resize', h)}
                 onTouchStart={e => handleResizeTouchStart(e, el, h)}
-                style={{ position: 'absolute', ...handlePos[h], width: 12, height: 12, background: '#fff', border: '2px solid var(--brand)', borderRadius: 2, zIndex: 10, touchAction: 'none' }}
+                style={{ position: 'absolute', ...handlePos[h], width: 20, height: 20, background: '#fff', border: '2px solid var(--brand)', borderRadius: 3, zIndex: 10, touchAction: 'none', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}
               />
             ))}
             {/* Rotate handle */}
             <div
               onMouseDown={e => onMouseDown(e, el, 'rotate')}
-              style={{ position: 'absolute', top: -28, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, background: 'var(--brand)', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}
+              style={{ position: 'absolute', top: -36, left: '50%', transform: 'translateX(-50%)', width: 28, height: 28, background: 'var(--brand)', borderRadius: '50%', cursor: 'grab', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', boxShadow: '0 2px 6px rgba(0,0,0,0.25)' }}
             >
-              <span style={{ color: '#fff', fontSize: 11 }}>↻</span>
+              <span style={{ color: '#fff', fontSize: 15 }}>↻</span>
             </div>
-            <div style={{ position: 'absolute', top: -20, left: '50%', width: 2, height: 20, background: 'var(--brand)', transform: 'translateX(-50%)', zIndex: 9 }} />
+            <div style={{ position: 'absolute', top: -28, left: '50%', width: 2, height: 28, background: 'var(--brand)', transform: 'translateX(-50%)', zIndex: 9 }} />
           </>
         )}
 
@@ -608,10 +608,10 @@ const CanvasEnhanced: React.FC<Props> = ({
 
         {/* Alignment guide lines */}
         {alignLines.x.map((x, i) => (
-          <div key={`ax${i}`} style={{ position: 'absolute', left: x, top: 0, width: 1, height: '100%', background: '#e53e3e', opacity: 0.75, zIndex: 99999, pointerEvents: 'none' }} />
+          <div key={`ax${i}`} style={{ position: 'absolute', left: x - 1, top: 0, width: 2, height: '100%', background: '#ff2d55', opacity: 0.9, zIndex: 99999, pointerEvents: 'none', boxShadow: '0 0 3px rgba(255,45,85,0.6)' }} />
         ))}
         {alignLines.y.map((y, i) => (
-          <div key={`ay${i}`} style={{ position: 'absolute', left: 0, top: y, width: '100%', height: 1, background: '#e53e3e', opacity: 0.75, zIndex: 99999, pointerEvents: 'none' }} />
+          <div key={`ay${i}`} style={{ position: 'absolute', left: 0, top: y - 1, width: '100%', height: 2, background: '#ff2d55', opacity: 0.9, zIndex: 99999, pointerEvents: 'none', boxShadow: '0 0 3px rgba(255,45,85,0.6)' }} />
         ))}
       </div>
     </div>

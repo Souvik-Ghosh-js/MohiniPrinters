@@ -410,7 +410,7 @@ const AssetsPanel: React.FC<{
                 style={{ borderRadius:8, border:'2px solid var(--border)', overflow:'hidden', cursor:'pointer', height:90, background:'#fafafa', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:6, gap:4, transition:'border-color .15s' }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor='var(--brand)'}
                 onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
-                <img src={f.url} alt="" style={{ maxWidth:'100%', maxHeight:66, objectFit:'contain' }} />
+                <img src={f.url} alt="" style={{ maxWidth:'100%', maxHeight:66, objectFit:'contain', filter: sub === 'logos' ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.35))' : undefined }} />
                 <span style={{ fontSize:'0.55rem', color:'var(--muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%', textAlign:'center' as any }}>{f.displayName}</span>
               </div>
             ))}
@@ -622,9 +622,22 @@ const Editor: React.FC = () => {
   }
 
   // ─── EXPORT TO JSON ──────────────────────────────────────
-  const exportAsJson = () => {
+  const exportAsJson = async () => {
+    // Generate a canvas image snapshot to embed as _preview
+    let _preview: string | undefined
+    try {
+      const thumbBlob = await generateThumbnailBlob(elements, background, width, height)
+      if (thumbBlob) {
+        _preview = await new Promise<string>(res => {
+          const reader = new FileReader()
+          reader.onloadend = () => res(reader.result as string)
+          reader.readAsDataURL(thumbBlob)
+        })
+      }
+    } catch {}
+
     // Export in our native format — all properties preserved exactly as-is
-    const exportData = {
+    const exportData: any = {
       _format: 'mohini-design-hub',
       _version: '2.0',
       project: title,
@@ -634,6 +647,8 @@ const Editor: React.FC = () => {
       background,
       elements,
     }
+    if (_preview) exportData._preview = _preview
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

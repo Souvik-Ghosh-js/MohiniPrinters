@@ -166,6 +166,15 @@ const ThumbnailElement: React.FC<{ el: CanvasElement }> = ({ el }) => {
 const TemplateThumbnail: React.FC<Props> = ({ jsonData, width = 160, height = 100 }) => {
   const { elements, background, cw, ch } = useMemo(() => parseTemplateJson(jsonData), [jsonData])
 
+  // If the JSON has a _preview snapshot, show that directly (pixel-perfect)
+  if (jsonData?._preview) {
+    return (
+      <div style={{ width, height, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+        <img src={jsonData._preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </div>
+    )
+  }
+
   // Scale to cover: fill the entire thumbnail area (crop overflow, no gray bars)
   const scale = Math.max(width / cw, height / ch)
   // Center the scaled canvas so we show the middle, not the top-left corner
