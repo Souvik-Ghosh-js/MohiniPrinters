@@ -388,23 +388,26 @@ const Editor: React.FC = () => {
   const saveProject = async (showToast = true) => {
     setSaving(true)
     try {
-      // Generate thumbnail from the rendered canvas
-      let thumbnail_url: string | undefined
-      try {
-        const target = document.querySelector('.canvas-render-target') as HTMLElement | null
-        if (target) {
-          const cvs = await html2canvas(target, { scale: 0.25, useCORS: true, logging: false, backgroundColor: null })
-          thumbnail_url = cvs.toDataURL('image/jpeg', 0.7)
-        }
-      } catch { /* thumbnail generation is best-effort */ }
-
       await axios.put(`${API}/api/projects/${projectId}`, {
         title,
         canvas_data: JSON.stringify({ elements, background }),
         width, height,
-        ...(thumbnail_url ? { thumbnail_url } : {}),
       }, { headers })
       if (showToast) toast.success('Saved!')
+
+      // Upload thumbnail asynchronously (best-effort, don't block save toast)
+      try {
+        const target = document.querySelector('.canvas-render-target') as HTMLElement | null
+        if (target) {
+          const cvs = await html2canvas(target, { scale: 0.3, useCORS: true, logging: false, backgroundColor: '#ffffff' })
+          cvs.toBlob(async (blob) => {
+            if (!blob) return
+            const fd = new FormData()
+            fd.append('thumbnail', blob, 'thumb.jpg')
+            await axios.post(`${API}/api/projects/${projectId}/thumbnail`, fd, { headers })
+          }, 'image/jpeg', 0.75)
+        }
+      } catch { /* thumbnail is best-effort */ }
     } catch { if (showToast) toast.error('Save failed') }
     finally { setSaving(false) }
   }
@@ -783,7 +786,7 @@ const Editor: React.FC = () => {
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:7, padding:7, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain', filter:'brightness(0) invert(1)' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain', objectFit:'contain' }} />
         </div>
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
@@ -911,7 +914,7 @@ const Editor: React.FC = () => {
 
         {/* Mohini Logo — centered absolutely */}
         <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain', filter:'brightness(0) invert(1)' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain', objectFit:'contain' }} />
         </div>
 
         <div style={{ flex:1 }}/>

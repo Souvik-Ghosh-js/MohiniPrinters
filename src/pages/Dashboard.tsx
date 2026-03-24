@@ -8,6 +8,7 @@ import { RootState } from '../store'
 import { logout } from '../store/slices/authSlice'
 import { DESIGN_TEMPLATES } from '../types/canvas'
 import TemplateThumbnail from '../components/Editor/TemplateThumbnail'
+import { fixProtocol } from '../utils/assetApi'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -62,7 +63,7 @@ const Dashboard: React.FC = () => {
         const isJson = t.type === 'application/json' || t.name.endsWith('.json')
         if (!isJson) return t
         try {
-          const jr = await fetch(t.url)
+          const jr = await fetch(fixProtocol(t.url))
           if (!jr.ok) return t
           const jd = await jr.json()
           const pageJson = jd?.pages?.[0]?.json || jd?.canvasData || jd
@@ -125,7 +126,7 @@ const Dashboard: React.FC = () => {
       {/* Header */}
       <header style={{ background: 'var(--corporate)', padding: '0 2rem', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height: 46, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height: 46, objectFit: 'contain' }} />
           <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff' }}>Mohini Design Hub</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -176,10 +177,12 @@ const Dashboard: React.FC = () => {
                 onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
               >
-                <div style={{ width: '100%', height: 150, background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <div style={{ width: '100%', height: 150, overflow: 'hidden', position: 'relative', background: '#e8f0f7' }}>
                   {p.thumbnail_url
-                    ? <img src={p.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <Layout size={40} color="#cbd5e1" />
+                    ? <img src={fixProtocol(p.thumbnail_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, hsl(${(p.id * 47) % 360},55%,72%) 0%, hsl(${(p.id * 47 + 60) % 360},55%,60%) 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'rgba(255,255,255,0.7)', userSelect: 'none' }}>{(p.title || 'U')[0].toUpperCase()}</span>
+                      </div>
                   }
                 </div>
                 <div style={{ padding: '0.875rem 1rem' }}>
