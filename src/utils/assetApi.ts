@@ -90,9 +90,14 @@ export const extractTemplatePreview = (j: any): string | null => {
   if (!j) return null
   if (j.projectImageUrl) return j.projectImageUrl
   if (j.pageImageUrl) return j.pageImageUrl
-  if (j.backgroundImage) return j.backgroundImage
-  if (j.canvasData?.backgroundImage) return j.canvasData.backgroundImage
-  if (j.pages?.[0]?.json?.backgroundImage) return j.pages[0].json.backgroundImage
+  // Native format: background image
+  if (j._format === 'mohini-design-hub' || Array.isArray(j.elements)) {
+    if (j.background?.type === 'image' && j.background?.image?.src) return j.background.image.src
+    return null
+  }
+  // Fabric.js format
+  const bi = j.backgroundImage || j.canvasData?.backgroundImage || j.pages?.[0]?.json?.backgroundImage
+  if (bi) return typeof bi === 'string' ? bi : (bi.src || null)
   return null
 }
 

@@ -99,13 +99,26 @@ const fabricObjectToElement = (obj: any, idx: number): CanvasElement | null => {
   return null
 }
 
-// Apply a Fabric.js JSON template to Redux state
+// Apply a JSON template to Redux state
 const applyFabricTemplate = (
   jsonData: any,
   dispatch: any,
   toast: any,
 ) => {
   try {
+    // ── Native format (exported by this app) ─────────────────
+    if (jsonData._format === 'mohini-design-hub' || Array.isArray(jsonData.elements)) {
+      dispatch(loadProject({
+        elements: jsonData.elements || [],
+        background: jsonData.background || { type: 'solid', solid: { color: '#ffffff', opacity: 100 } },
+        width: jsonData.width || A4_WIDTH,
+        height: jsonData.height || A4_HEIGHT,
+      }))
+      toast.success(`Template applied — ${(jsonData.elements || []).length} elements loaded`)
+      return true
+    }
+
+    // ── Fabric.js / legacy format ────────────────────────────
     // Detect structure: pages[], canvasData, or flat
     let pageJson: any = null
     if (jsonData.pages && Array.isArray(jsonData.pages) && jsonData.pages.length > 0) {
@@ -395,17 +408,40 @@ const Editor: React.FC = () => {
       }, { headers })
       if (showToast) toast.success('Saved!')
 
-      // Upload thumbnail asynchronously (best-effort, don't block save toast)
+      // Upload thumbnail — same capture logic as exportAsPng, just smaller scale
       try {
-        const target = document.querySelector('.canvas-render-target') as HTMLElement | null
-        if (target) {
-          const cvs = await html2canvas(target, { scale: 0.3, useCORS: true, logging: false, backgroundColor: '#ffffff' })
+        const el = document.querySelector('.canvas-export-target') as HTMLElement | null
+        if (el) {
+          dispatch(selectElement(null))
+          await new Promise(r => setTimeout(r, 80)) // let React deselect before capture
+          const prevTransform = el.style.transform
+          const prevW = el.style.width
+          const prevH = el.style.height
+          el.style.transform = 'scale(1)'
+          el.style.width = `${width}px`
+          el.style.height = `${height}px`
+          const cvs = await html2canvas(el, {
+            scale: 0.5,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width,
+            height,
+            windowWidth: width,
+            windowHeight: height,
+            x: 0,
+            y: 0,
+          })
+          el.style.transform = prevTransform
+          el.style.width = prevW
+          el.style.height = prevH
           cvs.toBlob(async (blob) => {
             if (!blob) return
             const fd = new FormData()
             fd.append('thumbnail', blob, 'thumb.jpg')
             await axios.post(`${API}/api/projects/${projectId}/thumbnail`, fd, { headers })
-          }, 'image/jpeg', 0.75)
+          }, 'image/jpeg', 0.85)
         }
       } catch { /* thumbnail is best-effort */ }
     } catch { if (showToast) toast.error('Save failed') }
@@ -492,76 +528,17 @@ const Editor: React.FC = () => {
 
   // ─── EXPORT TO JSON ──────────────────────────────────────
   const exportAsJson = () => {
-    // Build Fabric-compatible JSON from current state
-    const fabricObjects = elements.map(el => {
-      const p = el.properties
-      const base = {
-        left: el.x, top: el.y,
-        angle: el.rotation || 0,
-        opacity: (el.opacity ?? 100) / 100,
-        visible: el.visible !== false,
-        scaleX: 1, scaleY: 1,
-        originX: 'left', originY: 'top',
-        globalCompositeOperation: 'source-over',
-      }
-
-      if (el.type === 'image') {
-        return { ...base, type: 'Image', width: el.width, height: el.height, src: p.src, crossOrigin: 'anonymous', filters: [] }
-      }
-      if (el.type === 'text') {
-        return {
-          ...base, type: 'Textbox',
-          width: el.width, height: el.height,
-          text: p.text || '',
-          fontSize: p.fontSize || 18,
-          fontFamily: p.fontFamily || 'Arial',
-          fontWeight: p.fontWeight || '400',
-          fontStyle: p.fontStyle || 'normal',
-          textAlign: p.textAlign || 'center',
-          fill: p.fill || '#000000',
-          lineHeight: p.lineHeight || 1.16,
-          charSpacing: p.letterSpacing ? p.letterSpacing * 1000 : 0,
-          underline: p.textDecoration === 'underline',
-          styles: [],
-        }
-      }
-      if (el.type === 'shape') {
-        return {
-          ...base, type: p.borderRadius === 999 ? 'Circle' : 'Rect',
-          width: el.width, height: el.height,
-          fill: p.fill || '#cccccc',
-          rx: p.borderRadius !== 999 ? (p.borderRadius || 0) : undefined,
-          ry: p.borderRadius !== 999 ? (p.borderRadius || 0) : undefined,
-          radius: p.borderRadius === 999 ? Math.min(el.width, el.height) / 2 : undefined,
-        }
-      }
-      return null
-    }).filter(Boolean)
-
-    let bgImage: any = null
-    if (background.type === 'image' && background.image?.src) {
-      bgImage = { type: 'Image', src: background.image.src, left: 0, top: 0, width: width, height: height, scaleX: 1, scaleY: 1, crossOrigin: 'anonymous', filters: [] }
-    }
-
+    // Export in our native format — all properties preserved exactly as-is
     const exportData = {
+      _format: 'mohini-design-hub',
+      _version: '2.0',
       project: title,
-      pages: [{
-        id: 1,
-        json: {
-          version: '6.9.0',
-          objects: fabricObjects,
-          background: background.type === 'solid' ? (background.solid?.color || '#ffffff') : '#ffffff',
-          backgroundImage: bgImage,
-          width,
-          height,
-        }
-      }],
-      activePage: 1,
       exportDate: new Date().toISOString(),
-      version: '1.0',
-      totalPages: 1,
+      width,
+      height,
+      background,
+      elements,
     }
-
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -786,7 +763,7 @@ const Editor: React.FC = () => {
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:7, padding:7, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain', objectFit:'contain' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
         </div>
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
         <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
@@ -914,7 +891,7 @@ const Editor: React.FC = () => {
 
         {/* Mohini Logo — centered absolutely */}
         <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center' }}>
-          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain', objectFit:'contain' }} />
+          <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain' }} />
         </div>
 
         <div style={{ flex:1 }}/>
