@@ -79,7 +79,11 @@ const SliderField: React.FC<{ label: string; value: number; min: number; max: nu
       <label className="label" style={{ marginBottom: 0 }}>{label}</label>
       <span style={{ fontSize: '0.75rem', color: 'var(--brand)', fontWeight: 600 }}>{Math.round(value)}{unit}</span>
     </div>
-    <input type="range" className="range-input" min={min} max={max} value={value} onChange={e => onChange(+e.target.value)} />
+    <input type="range" className="range-input" min={min} max={max} value={value}
+      onChange={e => onChange(+e.target.value)}
+      onTouchStart={e => e.stopPropagation()}
+      onTouchMove={e => e.stopPropagation()}
+    />
   </div>
 )
 

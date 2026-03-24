@@ -599,7 +599,10 @@ const CanvasEnhanced: React.FC<Props> = ({
         onTouchEnd={e => { if (e.target === e.currentTarget && !editingId) onSelect(null) }}
       >
         {/* Background layer — isolated so opacity doesn't bleed into elements */}
-        <div style={getBgLayerStyle()} />
+        <div style={{ ...getBgLayerStyle(), position: 'absolute', inset: 0 }}
+          onClick={e => { if (!editingId) { e.stopPropagation(); onSelect(null) } }}
+          onTouchEnd={e => { if (!editingId) { e.stopPropagation(); onSelect(null) } }}
+        />
 
         {sorted.map(renderElement)}
 

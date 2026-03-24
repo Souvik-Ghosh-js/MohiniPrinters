@@ -7,6 +7,7 @@ import { Plus, Trash2, LogOut, Settings, Layout, Clock, ChevronRight } from 'luc
 import { RootState } from '../store'
 import { logout } from '../store/slices/authSlice'
 import { DESIGN_TEMPLATES } from '../types/canvas'
+import TemplateThumbnail from '../components/Editor/TemplateThumbnail'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -17,6 +18,10 @@ interface AdminTemplate {
   category: string
   type: string
   createdAt: string
+  jsonData?: any
+  bgColor?: string
+  bgImgSrc?: string
+  elemCount?: number
 }
 
 const Dashboard: React.FC = () => {
@@ -51,7 +56,23 @@ const Dashboard: React.FC = () => {
     setTemplatesLoading(true)
     try {
       const res = await axios.get(`${API}/api/assets/templates`)
-      setAdminTemplates(res.data.files || [])
+      const files: AdminTemplate[] = res.data.files || []
+      // Enrich JSON templates with bg color / preview data
+      const enriched = await Promise.all(files.map(async t => {
+        const isJson = t.type === 'application/json' || t.name.endsWith('.json')
+        if (!isJson) return t
+        try {
+          const jr = await fetch(t.url)
+          if (!jr.ok) return t
+          const jd = await jr.json()
+          const pageJson = jd?.pages?.[0]?.json || jd?.canvasData || jd
+          const bgColor = typeof pageJson?.background === 'string' && pageJson.background !== 'rgba(0,0,0,0)' ? pageJson.background : undefined
+          const bgImgSrc = pageJson?.backgroundImage ? (typeof pageJson.backgroundImage === 'string' ? pageJson.backgroundImage : pageJson.backgroundImage?.src) : undefined
+          const elemCount = Array.isArray(pageJson?.objects) ? pageJson.objects.length : undefined
+          return { ...t, jsonData: jd, bgColor, bgImgSrc, elemCount }
+        } catch { return t }
+      }))
+      setAdminTemplates(enriched)
     } catch { /* silently ignore */ }
     finally { setTemplatesLoading(false) }
   }
@@ -205,15 +226,13 @@ const Dashboard: React.FC = () => {
                         onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                         onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
                       >
-                        <div style={{ width: '100%', height: 130, background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                          {(tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i)) ? (
-                            <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                              <Layout size={32} color="#cbd5e1" />
-                              <span style={{ fontSize: '0.65rem', color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4 }}>JSON Template</span>
-                            </div>
-                          )}
+                        <div style={{ width: '100%', height: 130, overflow: 'hidden' }}>
+                          {tpl.jsonData
+                            ? <TemplateThumbnail jsonData={tpl.jsonData} width={300} height={130} />
+                            : (tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i))
+                              ? <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layout size={32} color="#cbd5e1" /></div>
+                          }
                         </div>
                         <div style={{ padding: '0.75rem 1rem' }}>
                           <h3 style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tpl.displayName}</h3>
@@ -278,12 +297,13 @@ const Dashboard: React.FC = () => {
                                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand)' }}
                                   onMouseLeave={e => { e.currentTarget.style.borderColor = selectedTemplate?.name === tpl.name ? 'var(--brand)' : 'var(--border)' }}
                                 >
-                                  <div style={{ height: 90, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                    {(tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i)) ? (
-                                      <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (
-                                      <Layout size={22} style={{ opacity: 0.3 }} />
-                                    )}
+                                  <div style={{ height: 90, overflow: 'hidden' }}>
+                                    {tpl.jsonData
+                                      ? <TemplateThumbnail jsonData={tpl.jsonData} width={200} height={90} />
+                                      : (tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i))
+                                        ? <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        : <div style={{ width: '100%', height: '100%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layout size={22} style={{ opacity: 0.3 }} /></div>
+                                    }
                                   </div>
                                   <div style={{ padding: '5px 7px' }}>
                                     <p style={{ fontSize: '0.68rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: selectedTemplate?.name === tpl.name ? 'var(--brand)' : 'var(--text)' }}>{tpl.displayName}</p>

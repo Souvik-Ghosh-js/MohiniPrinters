@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import html2canvas from 'html2canvas'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import axios from 'axios'
@@ -22,6 +23,7 @@ import TemplateSelector from '../components/Editor/TemplateSelector'
 import LayersPanel from '../components/Editor/LayersPanel'
 import { useAssets } from '../hooks/useAssets'
 import { AssetFile, fixProtocol } from '../utils/assetApi'
+import TemplateThumbnail from '../components/Editor/TemplateThumbnail'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -214,11 +216,12 @@ const ServerTemplatePanel: React.FC<{
             style={{ borderRadius: 8, border: '1.5px solid var(--border)', overflow: 'hidden', cursor: 'pointer', background: '#fff', transition: 'all .15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor='var(--brand)'; e.currentTarget.style.transform='translateY(-1px)' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border)'; e.currentTarget.style.transform='' }}>
-            <div style={{ height: 65, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {f.previewUrl
-                ? <img src={f.previewUrl} alt={f.displayName} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
-                : <Layout size={18} style={{ opacity:.3 }} />}
-            </div>
+            {f.jsonData
+              ? <TemplateThumbnail jsonData={f.jsonData} width={120} height={80} />
+              : f.previewUrl
+                ? <div style={{ height:80, overflow:'hidden' }}><img src={f.previewUrl} alt={f.displayName} style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div>
+                : <div style={{ height:80, background:'#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center' }}><Layout size={20} style={{ opacity:.3 }} /></div>
+            }
             <div style={{ padding: '4px 6px' }}>
               <p style={{ fontSize:'0.62rem', fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{f.displayName||f.name}</p>
               {f.category && <p style={{ fontSize:'0.58rem', color:'var(--muted)' }}>{f.category}</p>}
@@ -253,20 +256,25 @@ const AssetsPanel: React.FC<{
 
       <div style={{ padding: '8px' }}>
         {sub === 'backgrounds' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {files.map(f => (
               <div key={f.name} onClick={() => onSetBg(f.url)} title="Set as background"
-                style={{ borderRadius: 6, overflow:'hidden', border:'1px solid var(--border)', cursor:'pointer', height: 52 }}>
+                style={{ borderRadius: 8, overflow:'hidden', border:'2px solid var(--border)', cursor:'pointer', height: 110, transition:'border-color .15s' }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='var(--brand)'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
                 <img src={f.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
             {files.map(f => (
               <div key={f.name} onClick={() => onAddImage(f.url)} title={f.displayName}
-                style={{ borderRadius:6, border:'1px solid var(--border)', overflow:'hidden', cursor:'pointer', height:52, background:'#fafafa', display:'flex', alignItems:'center', justifyContent:'center', padding:3 }}>
-                <img src={f.url} alt="" style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain' }} />
+                style={{ borderRadius:8, border:'2px solid var(--border)', overflow:'hidden', cursor:'pointer', height:90, background:'#fafafa', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:6, gap:4, transition:'border-color .15s' }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='var(--brand)'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
+                <img src={f.url} alt="" style={{ maxWidth:'100%', maxHeight:66, objectFit:'contain' }} />
+                <span style={{ fontSize:'0.55rem', color:'var(--muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', width:'100%', textAlign:'center' as any }}>{f.displayName}</span>
               </div>
             ))}
           </div>
@@ -380,10 +388,21 @@ const Editor: React.FC = () => {
   const saveProject = async (showToast = true) => {
     setSaving(true)
     try {
+      // Generate thumbnail from the rendered canvas
+      let thumbnail_url: string | undefined
+      try {
+        const target = document.querySelector('.canvas-render-target') as HTMLElement | null
+        if (target) {
+          const cvs = await html2canvas(target, { scale: 0.25, useCORS: true, logging: false, backgroundColor: null })
+          thumbnail_url = cvs.toDataURL('image/jpeg', 0.7)
+        }
+      } catch { /* thumbnail generation is best-effort */ }
+
       await axios.put(`${API}/api/projects/${projectId}`, {
         title,
         canvas_data: JSON.stringify({ elements, background }),
         width, height,
+        ...(thumbnail_url ? { thumbnail_url } : {}),
       }, { headers })
       if (showToast) toast.success('Saved!')
     } catch { if (showToast) toast.error('Save failed') }
@@ -718,11 +737,7 @@ const Editor: React.FC = () => {
     )
     if (panel === 'layers') return (
       <LayersPanel elements={elements} selectedId={selectedElementId}
-        onSelect={id=>{
-          dispatch(selectElement(id))
-          const tapped = elements.find(e => e.id === id)
-          if (tapped?.type !== 'text') setMobilePanel('properties')
-        }}
+        onSelect={id=>dispatch(selectElement(id))}
         onToggleVisibility={id=>dispatch(toggleVisibility(id))}
         onToggleLock={id=>dispatch(toggleLock(id))}
         onBringForward={id=>dispatch(bringForward(id))}
@@ -783,14 +798,7 @@ const Editor: React.FC = () => {
           <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
             <CanvasEnhanced
               elements={elements} selectedId={selectedElementId}
-              onSelect={id=>{
-                dispatch(selectElement(id))
-                if (id) {
-                  const tapped = elements.find(e => e.id === id)
-                  // Text elements: don't auto-open panel — first tap selects, second tap opens keyboard
-                  if (tapped?.type !== 'text') setMobilePanel('properties')
-                }
-              }}
+              onSelect={id=>{ dispatch(selectElement(id)); if (!id && mobilePanel === 'properties') setMobilePanel(null) }}
               onUpdate={(id,updates)=>dispatch(updateElement({id,updates}))}
               onCommit={()=>dispatch(commitUpdate())}
               width={width} height={height} zoom={zoom} background={background}
