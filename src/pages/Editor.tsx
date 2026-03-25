@@ -32,52 +32,166 @@ type AssetSubTab = 'logos' | 'backgrounds' | 'elements' | 'schools'
 
 let saveTimer: ReturnType<typeof setTimeout>
 
-// ─── THUMBNAIL GENERATOR (html2canvas based) ─────────────────
-const generateThumbnailBlob = async (
-  cw: number, ch: number
+// ─── CUSTOM CANVAS RENDERER ───────────────────────────────────
+// Renders the design directly to an HTML5 canvas from state — no DOM capture,
+// no html2canvas quirks. Arc text is drawn natively using Canvas 2D paths.
+
+const _loadImg = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('img load fail'))
+    img.src = src
+  })
+
+// Draw text characters along a quadratic bezier curve (matches CurvedText SVG path)
+const _drawArcText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  p0: [number, number], p1: [number, number], p2: [number, number]
+) => {
+  const SEGS = 300
+  const lens: number[] = [0]
+  let total = 0, px = p0[0], py = p0[1]
+  for (let i = 1; i <= SEGS; i++) {
+    const t = i / SEGS, mt = 1 - t
+    const x = mt*mt*p0[0] + 2*mt*t*p1[0] + t*t*p2[0]
+    const y = mt*mt*p0[1] + 2*mt*t*p1[1] + t*t*p2[1]
+    total += Math.hypot(x - px, y - py)
+    lens.push(total); px = x; py = y
+  }
+  const tAt = (tgt: number) => {
+    if (tgt <= 0) return 0
+    if (tgt >= total) return 1
+    let lo = 0, hi = SEGS
+    while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (lens[mid] < tgt) lo = mid; else hi = mid }
+    return (lo + (tgt - lens[lo]) / (lens[hi] - lens[lo])) / SEGS
+  }
+  const ptAt = (t: number): [number, number] => {
+    const mt = 1 - t
+    return [mt*mt*p0[0]+2*mt*t*p1[0]+t*t*p2[0], mt*mt*p0[1]+2*mt*t*p1[1]+t*t*p2[1]]
+  }
+  const angAt = (t: number) => {
+    const mt = 1 - t
+    return Math.atan2(2*mt*(p1[1]-p0[1])+2*t*(p2[1]-p1[1]), 2*mt*(p1[0]-p0[0])+2*t*(p2[0]-p1[0]))
+  }
+  const chars = [...text]
+  const widths = chars.map(c => ctx.measureText(c).width)
+  const textTotal = widths.reduce((a, b) => a + b, 0)
+  let cursor = (total - textTotal) / 2
+  chars.forEach((ch, i) => {
+    const cw = widths[i]
+    const t = tAt(cursor + cw / 2)
+    const [x, y] = ptAt(t)
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angAt(t)); ctx.fillText(ch, -cw / 2, 0); ctx.restore()
+    cursor += cw
+  })
+}
+
+const renderDesignToBlob = async (
+  elements: CanvasElement[],
+  background: Background,
+  cw: number, ch: number,
+  scale = 1
 ): Promise<Blob | null> => {
   try {
-    const { default: html2canvas } = await import('html2canvas')
-    // Capture the .canvas-export-target div. It always has the native width/height,
-    // but its transform is usually scale(<zoom>).
-    const el = document.querySelector('.canvas-export-target') as HTMLElement
-    if (!el) return null
+    const cvs = document.createElement('canvas')
+    cvs.width = cw * scale; cvs.height = ch * scale
+    const ctx = cvs.getContext('2d')
+    if (!ctx) return null
+    if (scale !== 1) ctx.scale(scale, scale)
 
-    const canvas = await html2canvas(el, {
-      scale: 1, // Snapshot doesn't need high-DPI scaling
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      width: cw,
-      height: ch,
-      onclone: (clonedDoc) => {
-        const target = clonedDoc.querySelector('.canvas-export-target') as HTMLElement
-        if (target) {
-          target.style.transform = 'none'
-          target.style.width = `${cw}px`
-          target.style.height = `${ch}px`
-          
-          // Ensure all parents are unclipped and untransformed in the clone
-          let curr: HTMLElement | null = target.parentElement
-          while (curr && curr !== clonedDoc.body) {
-            curr.style.transform = 'none'
-            curr.style.overflow = 'visible'
-            curr.style.width = 'auto'
-            curr.style.height = 'auto'
-            curr = curr.parentElement
-          }
+    // Background
+    if (background.type === 'solid') {
+      ctx.globalAlpha = (background.solid?.opacity ?? 100) / 100
+      ctx.fillStyle = background.solid?.color || '#ffffff'
+      ctx.fillRect(0, 0, cw, ch)
+    } else if (background.type === 'gradient' && background.gradient) {
+      const ang = ((background.gradient.angle ?? 135) * Math.PI) / 180
+      const grad = ctx.createLinearGradient(
+        cw/2 - Math.cos(ang)*cw/2, ch/2 - Math.sin(ang)*ch/2,
+        cw/2 + Math.cos(ang)*cw/2, ch/2 + Math.sin(ang)*ch/2
+      )
+      const cols = background.gradient.colors || ['#fff', '#ccc']
+      cols.forEach((c, i) => grad.addColorStop(i / Math.max(cols.length - 1, 1), c))
+      ctx.globalAlpha = (background.gradient.opacity ?? 100) / 100
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, cw, ch)
+    } else if (background.type === 'image' && background.image?.src) {
+      try {
+        const img = await _loadImg(background.image.src)
+        ctx.globalAlpha = (background.image.opacity ?? 100) / 100
+        ctx.drawImage(img, 0, 0, cw, ch)
+      } catch {}
+    } else {
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cw, ch)
+    }
+    ctx.globalAlpha = 1
+
+    // Elements
+    const sorted = [...elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+    for (const el of sorted) {
+      if (el.visible === false) continue
+      const p = el.properties
+      ctx.save()
+      ctx.globalAlpha = (el.opacity ?? 100) / 100
+      if (el.rotation) {
+        const cx = el.x + el.width / 2, cy = el.y + el.height / 2
+        ctx.translate(cx, cy); ctx.rotate((el.rotation * Math.PI) / 180); ctx.translate(-cx, -cy)
+      }
+
+      if (el.type === 'image') {
+        try { const img = await _loadImg(p.src); ctx.drawImage(img, el.x, el.y, el.width, el.height) } catch {}
+
+      } else if (el.type === 'shape') {
+        const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
+        ctx.fillStyle = p.fill === 'transparent' ? 'rgba(0,0,0,0)' : (p.fill || '#2980b9')
+        if (st === 'circle') {
+          ctx.beginPath(); ctx.ellipse(el.x + el.width/2, el.y + el.height/2, el.width/2, el.height/2, 0, 0, Math.PI*2); ctx.fill()
+        } else if (st === 'triangle') {
+          ctx.beginPath(); ctx.moveTo(el.x + el.width/2, el.y); ctx.lineTo(el.x + el.width, el.y + el.height); ctx.lineTo(el.x, el.y + el.height); ctx.closePath(); ctx.fill()
+        } else if (st === 'diamond') {
+          ctx.beginPath(); ctx.moveTo(el.x + el.width/2, el.y); ctx.lineTo(el.x + el.width, el.y + el.height/2); ctx.lineTo(el.x + el.width/2, el.y + el.height); ctx.lineTo(el.x, el.y + el.height/2); ctx.closePath(); ctx.fill()
+        } else {
+          const r = Math.min(p.borderRadius || 0, el.width/2, el.height/2)
+          if (r > 0) { ctx.beginPath(); ctx.roundRect(el.x, el.y, el.width, el.height, r); ctx.fill() }
+          else ctx.fillRect(el.x, el.y, el.width, el.height)
+        }
+        if ((p.stroke?.width || 0) > 0) {
+          ctx.strokeStyle = p.stroke.color || '#000'; ctx.lineWidth = p.stroke.width; ctx.stroke()
+        }
+
+      } else if (el.type === 'text') {
+        const fontSize = p.fontSize || 24
+        ctx.font = `${p.fontStyle || 'normal'} ${p.fontWeight || '400'} ${fontSize}px ${p.fontFamily || 'Arial'}, Arial, sans-serif`
+        ctx.fillStyle = p.fill || '#000000'
+        ctx.textBaseline = 'middle'
+
+        if (p.textCurve && p.textCurve !== 'none') {
+          const amount = p.curveAmount ?? 50
+          const w = el.width, h = el.height
+          const bend = (amount / 100) * h * 2
+          const midY = amount >= 0 ? el.y - bend : el.y + h - bend
+          _drawArcText(ctx, p.text || '', [el.x, el.y + h/2], [el.x + w/2, midY], [el.x + w, el.y + h/2])
+        } else {
+          ctx.textAlign = (p.textAlign as CanvasTextAlign) || 'center'
+          const lines = (p.text || '').split('\n')
+          const lineH = fontSize * (p.lineHeight || 1.4)
+          let startY = el.y + (el.height - lines.length * lineH) / 2 + lineH / 2
+          const x = p.textAlign === 'left' ? el.x + 4 : p.textAlign === 'right' ? el.x + el.width - 4 : el.x + el.width / 2
+          for (const line of lines) { ctx.fillText(line, x, startY); startY += lineH }
         }
       }
-    })
+      ctx.restore()
+    }
 
-    return new Promise(res => {
-      canvas.toBlob(b => res(b), 'image/jpeg', 0.85)
-    })
+    return new Promise(res => cvs.toBlob(b => res(b), 'image/jpeg', 0.85))
   } catch (err) {
-    console.error('Thumbnail generation failed:', err)
+    console.error('Render failed:', err)
     return null
   }
 }
+
 
 // ─── FABRIC JSON → OUR ELEMENT FORMAT ────────────────────────
 const fabricObjectToElement = (obj: any, idx: number): CanvasElement | null => {
@@ -627,7 +741,7 @@ const Editor: React.FC = () => {
       dispatch(selectElement(null))
       await new Promise(res => setTimeout(res, 50))
 
-      generateThumbnailBlob(width, height).then(async blob => {
+      renderDesignToBlob(elements, background, width, height).then(async blob => {
         if (!blob) return
         const fd = new FormData()
         fd.append('thumbnail', blob, 'thumb.jpg')
@@ -719,7 +833,7 @@ const Editor: React.FC = () => {
       dispatch(selectElement(null))
       await new Promise(res => setTimeout(res, 50))
       
-      const thumbBlob = await generateThumbnailBlob(width, height)
+      const thumbBlob = await renderDesignToBlob(elements, background, width, height)
       if (thumbBlob) {
         _preview = await new Promise<string>(res => {
           const reader = new FileReader()
@@ -753,43 +867,23 @@ const Editor: React.FC = () => {
 
   const exportAsPng = async () => {
     try {
-      const { default: html2canvas } = await import('html2canvas')
-      const el = document.querySelector('.canvas-export-target') as HTMLElement
-      if (!el) { toast.error('Canvas not found'); return }
-
-      const cv = await html2canvas(el, {
-        scale: 2, // High-quality for PNG export
-        useCORS: true,
-        allowTaint: true,
-        width,
-        height,
-        onclone: (clonedDoc) => {
-          const target = clonedDoc.querySelector('.canvas-export-target') as HTMLElement
-          if (target) {
-            target.style.transform = 'none'
-            target.style.width = `${width}px`
-            target.style.height = `${height}px`
-            
-            let curr: HTMLElement | null = target.parentElement
-            while (curr && curr !== clonedDoc.body) {
-              curr.style.transform = 'none'
-              curr.style.overflow = 'visible'
-              curr.style.width = 'auto'
-              curr.style.height = 'auto'
-              curr = curr.parentElement
-            }
-          }
-        }
-      })
-
+      // Custom renderer at 2× scale — correctly captures arc text
+      const cvs = document.createElement('canvas')
+      cvs.width = width * 2; cvs.height = height * 2
+      const ctx2 = cvs.getContext('2d')
+      if (ctx2) ctx2.scale(2, 2)
+      // Re-use renderDesignToBlob; we want PNG so we render then re-export from canvas
+      const blob = await renderDesignToBlob(elements, background, width, height, 2)
+      if (!blob) { toast.error('Export failed'); return }
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.download = `${title || 'design'}.png`
-      a.href = cv.toDataURL('image/png')
-      a.click()
-      toast.success('Exported as PNG!')
+      a.download = `${title || 'design'}.jpg`
+      a.href = url; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast.success('Exported!')
     } catch (err) {
       console.error(err)
-      toast.error('PNG export failed')
+      toast.error('Export failed')
     }
   }
 
