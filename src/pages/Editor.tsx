@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import axios from 'axios'
@@ -455,6 +455,23 @@ const Editor: React.FC = () => {
 
   // Auto-save disabled — only save explicitly via Save button
 
+  // Preserve mobile bottom-sheet scroll position across re-renders.
+  // PanelContent is defined inside Editor so its function identity changes every render,
+  // causing React to unmount/remount children and reset scrollTop.
+  // We work around this by attaching a ref to the sheet's scroll div and restoring scrollTop.
+  useLayoutEffect(() => {
+    const el = mobileSheetScrollRef.current
+    if (!el || mobilePanel !== 'properties') return
+    const curId = selectedElementId ?? null
+    if (prevMobileElId.current !== curId) {
+      prevMobileElId.current = curId
+      mobileSheetScroll.current = 0
+      el.scrollTop = 0
+    } else {
+      el.scrollTop = mobileSheetScroll.current
+    }
+  })
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -705,6 +722,10 @@ const Editor: React.FC = () => {
 
   // ─── MOBILE PANEL STATE ───────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<LeftTab | RightTab | null>(null)
+  // Refs to preserve scroll position in the mobile bottom sheet
+  const mobileSheetScrollRef = useRef<HTMLDivElement>(null)
+  const mobileSheetScroll    = useRef(0)
+  const prevMobileElId       = useRef<string | null>(null)
   // Use matchMedia (not innerWidth) so virtual keyboard opening doesn't flip mobile/desktop layout
   const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null
   const [isMobileView, setIsMobileView] = useState(mq ? mq.matches : false)
@@ -920,8 +941,33 @@ const Editor: React.FC = () => {
               style={{ padding:'10px 16px 6px', borderBottom:'1px solid var(--border)', flexShrink:0, cursor:'row-resize', touchAction:'none' }}>
               <div style={{ width:40, height:5, background:'#d1d5db', borderRadius:3, margin:'0 auto' }}/>
             </div>
-            <div style={{ overflowY:'auto', flex:1, paddingBottom:8 }}>
-              <PanelContent panel={mobilePanel}/>
+            <div
+              ref={mobileSheetScrollRef}
+              style={{ overflowY:'auto', flex:1, paddingBottom:8 }}
+              onScroll={() => { mobileSheetScroll.current = mobileSheetScrollRef.current?.scrollTop || 0 }}
+            >
+              {/* Properties panel rendered DIRECTLY (not via PanelContent) to prevent
+                  React unmounting it on every Editor re-render since PanelContent is
+                  defined inside this component and changes identity each render. */}
+              {mobilePanel === 'properties'
+                ? (selectedElement
+                    ? <PropertiesPanelEnhanced
+                        element={selectedElement}
+                        onUpdate={updates=>{ dispatch(updateElement({id:selectedElement.id,updates})); clearTimeout((window as any).__ct); (window as any).__ct=setTimeout(()=>dispatch(commitUpdate()),600) }}
+                        onDelete={()=>{ dispatch(deleteElement(selectedElement.id)); setMobilePanel(null) }}
+                        onDuplicate={()=>dispatch(duplicateElement(selectedElement.id))}
+                        onLock={()=>dispatch(toggleLock(selectedElement.id))}
+                        onToggleVisibility={()=>dispatch(toggleVisibility(selectedElement.id))}
+                        onBringForward={()=>dispatch(bringForward(selectedElement.id))}
+                        onSendBackward={()=>dispatch(sendBackward(selectedElement.id))}
+                      />
+                    : <div style={{ padding:'2rem 1rem', textAlign:'center', color:'var(--muted)' }}>
+                        <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>👆</div>
+                        <p style={{ fontSize:'0.875rem', lineHeight:1.5 }}>Tap an element on the canvas to edit its properties</p>
+                      </div>
+                  )
+                : <PanelContent panel={mobilePanel}/>
+              }
             </div>
           </div>
         </>
