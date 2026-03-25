@@ -78,7 +78,6 @@ const generateThumbnailBlob = async (
   } else if (background.type === 'image' && background.image?.src) {
     await new Promise<void>(res => {
       const img = new Image()
-      // No crossOrigin — images are served from our own backend, avoid CORS preflight failures
       img.onload = () => { ctx.drawImage(img,0,0,THUMB_W,THUMB_H); res() }
       img.onerror = () => res()
       img.src = background.image!.src
@@ -91,7 +90,6 @@ const generateThumbnailBlob = async (
     ctx.save()
     ctx.globalAlpha = (el.opacity??100)/100
     const x=el.x*scale, y=el.y*scale, w=el.width*scale, h=el.height*scale
-    // Apply rotation around element center
     if (el.rotation) {
       ctx.translate(x+w/2, y+h/2)
       ctx.rotate((el.rotation*Math.PI)/180)
@@ -102,7 +100,6 @@ const generateThumbnailBlob = async (
     if (el.type === 'image' && p.src) {
       await new Promise<void>(res => {
         const img = new Image()
-        // No crossOrigin — images served from our own backend, avoids CORS failures
         img.onload = () => {
           ctx.save()
           if (p.borderRadius) {
@@ -158,7 +155,7 @@ const generateThumbnailBlob = async (
 
   return new Promise(res => {
     try { cvs.toBlob(b => res(b), 'image/jpeg', 0.88) }
-    catch { res(null) }  // tainted canvas — can't export
+    catch { res(null) }
   })
 }
 
@@ -167,7 +164,6 @@ const fabricObjectToElement = (obj: any, idx: number): CanvasElement | null => {
   const makeId = () => `fabric_${Date.now()}_${idx}_${Math.random().toString(36).slice(2,6)}`
   const z = idx + 1
 
-  // Compute actual rendered position/size from Fabric scaleX/scaleY
   const x = obj.left || 0
   const y = obj.top  || 0
   const w = (obj.width  || 100) * (obj.scaleX || 1)
@@ -228,14 +224,12 @@ const fabricObjectToElement = (obj: any, idx: number): CanvasElement | null => {
   return null
 }
 
-// Apply a JSON template to Redux state
 const applyFabricTemplate = (
   jsonData: any,
   dispatch: any,
   toast: any,
 ) => {
   try {
-    // ── Native format (exported by this app) ─────────────────
     if (jsonData._format === 'mohini-design-hub' || Array.isArray(jsonData.elements)) {
       dispatch(loadProject({
         elements: jsonData.elements || [],
@@ -247,8 +241,6 @@ const applyFabricTemplate = (
       return true
     }
 
-    // ── Fabric.js / legacy format ────────────────────────────
-    // Detect structure: pages[], canvasData, or flat
     let pageJson: any = null
     if (jsonData.pages && Array.isArray(jsonData.pages) && jsonData.pages.length > 0) {
       pageJson = jsonData.pages[0].json
@@ -260,17 +252,14 @@ const applyFabricTemplate = (
 
     if (!pageJson) { toast.error('Unrecognised template structure'); return false }
 
-    // Canvas dimensions — default A4 if not in template
     const tplW = pageJson.width  || A4_WIDTH
     const tplH = pageJson.height || A4_HEIGHT
     dispatch(setCanvasSize({ width: tplW, height: tplH }))
 
-    // Background colour
     if (pageJson.background && typeof pageJson.background === 'string' && pageJson.background !== 'rgba(0,0,0,0)') {
       dispatch(updateBackground({ type: 'solid', solid: { color: pageJson.background, opacity: 100 } }))
     }
 
-    // Background image (Fabric backgroundImage is an object with src)
     if (pageJson.backgroundImage) {
       const bi = pageJson.backgroundImage
       const src = typeof bi === 'string' ? bi : bi.src
@@ -279,7 +268,6 @@ const applyFabricTemplate = (
       }
     }
 
-    // Convert all objects
     const objects: any[] = pageJson.objects || []
     const elements: CanvasElement[] = objects
       .map((obj, i) => fabricObjectToElement(obj, i))
@@ -292,7 +280,6 @@ const applyFabricTemplate = (
       height: tplH,
     }))
 
-    // Re-apply background image after loadProject (loadProject resets it)
     if (pageJson.backgroundImage) {
       const bi = pageJson.backgroundImage
       const src = typeof bi === 'string' ? bi : bi.src
@@ -429,6 +416,181 @@ const AssetsPanel: React.FC<{
   )
 }
 
+// ─── MEMOIZED PANEL CONTENT (MOVED OUTSIDE EDITOR) ───────────
+const PanelContent = React.memo(({ 
+  panel, 
+  selectedElement, 
+  onAddImage, 
+  onSetBg, 
+  onApplyTemplate, 
+  onSizeChange, 
+  onAddText, 
+  onAddShape, 
+  onImageUpload,
+  currentW,
+  currentH,
+  background,
+  onUpdateBackground,
+  elements,
+  selectedElementId,
+  onSelectElement,
+  onToggleVisibility,
+  onToggleLock,
+  onBringForward,
+  onSendBackward,
+  onUpdateElement,
+  onDeleteElement,
+  onDuplicateElement,
+  onClosePanel
+}: {
+  panel: LeftTab | RightTab;
+  selectedElement: CanvasElement | null;
+  onAddImage: (url: string) => void;
+  onSetBg: (url: string) => void;
+  onApplyTemplate: (f: AssetFile) => void;
+  onSizeChange: (w: number, h: number, name: string) => void;
+  onAddText: () => void;
+  onAddShape: (shapeType: string) => void;
+  onImageUpload: (e: React.ChangeEvent<HTMLInputElement>, onDone?: () => void) => void;
+  currentW: number;
+  currentH: number;
+  background: Background;
+  onUpdateBackground: (bg: Background) => void;
+  elements: CanvasElement[];
+  selectedElementId: string | null;
+  onSelectElement: (id: string | null) => void;
+  onToggleVisibility: (id: string) => void;
+  onToggleLock: (id: string) => void;
+  onBringForward: (id: string) => void;
+  onSendBackward: (id: string) => void;
+  onUpdateElement: (updates: any) => void;
+  onDeleteElement: (id: string) => void;
+  onDuplicateElement: (id: string) => void;
+  onClosePanel: () => void;
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLocalTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.endsWith('.json')) { toast.error('Please select a .json template file'); return }
+    try {
+      const text = await file.text()
+      const json = JSON.parse(text)
+      applyFabricTemplate(json, (action: any) => {}, toast)
+    } catch { toast.error('Invalid JSON file') }
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  if (panel === 'templates') return (
+    <div>
+      <ServerTemplatePanel
+        onApply={onApplyTemplate}
+        onSizeChange={onSizeChange}
+        currentW={currentW} 
+        currentH={currentH}
+      />
+      <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
+        <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--muted)', marginBottom:6 }}>Upload Your Template</div>
+        <input ref={fileInputRef} type="file" accept=".json" onChange={handleLocalTemplateUpload} style={{ display:'none' }}/>
+        <button className="btn btn-secondary btn-sm" style={{ width:'100%', justifyContent:'center', fontSize:'0.75rem' }} onClick={()=>fileInputRef.current?.click()}>
+          <Upload size={13}/> Upload JSON Template
+        </button>
+      </div>
+    </div>
+  );
+  
+  if (panel === 'assets') return <AssetsPanel onAddImage={onAddImage} onSetBg={onSetBg}/>;
+  
+  if (panel === 'add') return (
+    <div style={{ padding:'12px 8px' }}>
+      <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Add Elements</div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Text</div>
+        <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:4 }} onClick={()=>{ onAddText(); onClosePanel(); }}>
+          <Type size={14}/> Add Text
+        </button>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5, padding:'0 4px' }}>
+          {[
+            { type:'rect',        label:'Rect',     preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:2}}/> },
+            { type:'circle',      label:'Circle',   preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:'50%'}}/> },
+            { type:'triangle',    label:'Triangle', preview:<div style={{width:0,height:0,borderLeft:'7px solid transparent',borderRight:'7px solid transparent',borderBottom:'14px solid currentColor'}}/> },
+            { type:'diamond',     label:'Diamond',  preview:<div style={{width:12,height:12,background:'currentColor',transform:'rotate(45deg)'}}/> },
+            { type:'star',        label:'Star',     preview:<span style={{fontSize:14,lineHeight:'1'}}>★</span> },
+            { type:'pentagon',    label:'Pentagon', preview:<span style={{fontSize:13,lineHeight:'1'}}>⬠</span> },
+            { type:'hexagon',     label:'Hexagon',  preview:<span style={{fontSize:13,lineHeight:'1'}}>⬡</span> },
+            { type:'arrow_right', label:'Arrow',    preview:<span style={{fontSize:13,lineHeight:'1'}}>➤</span> },
+            { type:'cross',       label:'Cross',    preview:<span style={{fontSize:15,lineHeight:'1',fontWeight:700}}>✚</span> },
+            { type:'parallelogram',label:'Parallelogram',preview:<span style={{fontSize:12,lineHeight:'1'}}>▱</span> },
+            { type:'trapezoid',   label:'Trapezoid',preview:<span style={{fontSize:12,lineHeight:'1'}}>⏢</span> },
+            { type:'heart',       label:'Heart',    preview:<span style={{fontSize:14,lineHeight:'1'}}>♥</span> },
+          ].map(({type, label, preview}) => (
+            <button key={type} className="btn btn-secondary btn-sm"
+              style={{ flexDirection:'column', gap:3, padding:'6px 4px', fontSize:'0.58rem', height:48, justifyContent:'center', alignItems:'center' }}
+              onClick={()=>{ onAddShape(type); onClosePanel(); }}>
+              {preview}{label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image</div>
+        <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start' }}
+          onClick={()=>{ const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=(ev)=>{ onImageUpload(ev as any, ()=>onClosePanel()) }; inp.click() }}>
+          <Upload size={14}/> Upload Image from Device
+        </button>
+      </div>
+    </div>
+  );
+  
+  if (panel === 'size') return (
+    <div style={{ padding:'12px 8px' }}>
+      <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Page Size</div>
+      <TemplateSelector currentW={currentW} currentH={currentH} onSelectTemplate={(w,h,name)=>{
+        onSizeChange(w, h, name);
+        onClosePanel();
+      }}/>
+    </div>
+  );
+  
+  if (panel === 'layers') return (
+    <LayersPanel 
+      elements={elements} 
+      selectedId={selectedElementId}
+      onSelect={onSelectElement}
+      onToggleVisibility={onToggleVisibility}
+      onToggleLock={onToggleLock}
+      onBringForward={onBringForward}
+      onSendBackward={onSendBackward}
+    />
+  );
+  
+  if (panel === 'properties') return selectedElement ? (
+    <PropertiesPanelEnhanced
+      element={selectedElement}
+      onUpdate={onUpdateElement}
+      onDelete={()=>{ onDeleteElement(selectedElement.id); onClosePanel(); }}
+      onDuplicate={()=>onDuplicateElement(selectedElement.id)}
+      onLock={()=>onToggleLock(selectedElement.id)}
+      onToggleVisibility={()=>onToggleVisibility(selectedElement.id)}
+      onBringForward={()=>onBringForward(selectedElement.id)}
+      onSendBackward={()=>onSendBackward(selectedElement.id)}
+    />
+  ) : (
+    <div style={{ padding:'2rem 1rem', textAlign:'center', color:'var(--muted)' }}>
+      <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>👆</div>
+      <p style={{ fontSize:'0.875rem', lineHeight:1.5 }}>Tap an element on the canvas to edit its properties</p>
+    </div>
+  );
+  
+  if (panel === 'background') return <BackgroundEditor background={background} onUpdate={onUpdateBackground}/>;
+  
+  return null;
+});
+
 // ─── MAIN EDITOR ──────────────────────────────────────────────
 const Editor: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>()
@@ -453,12 +615,7 @@ const Editor: React.FC = () => {
 
   useEffect(() => { fetchProject() }, [projectId])
 
-  // Auto-save disabled — only save explicitly via Save button
-
-  // Preserve mobile bottom-sheet scroll position across re-renders.
-  // PanelContent is defined inside Editor so its function identity changes every render,
-  // causing React to unmount/remount children and reset scrollTop.
-  // We work around this by attaching a ref to the sheet's scroll div and restoring scrollTop.
+  // Preserve mobile bottom-sheet scroll position
   useLayoutEffect(() => {
     const el = mobileSheetScrollRef.current
     if (!el || mobilePanel !== 'properties') return
@@ -502,7 +659,6 @@ const Editor: React.FC = () => {
         height: p.height || A4_HEIGHT,
       }))
 
-      // Auto-fit zoom to screen
       const isMob = window.innerWidth <= 768
       const availW = window.innerWidth  - (isMob ? 24  : 248 + 256 + 80)
       const availH = window.innerHeight - (isMob ? 120 : 56  + 80)
@@ -513,7 +669,6 @@ const Editor: React.FC = () => {
       ) / 5) * 5
       dispatch(setZoom(Math.max(isMob ? 20 : 25, fitZoom)))
 
-      // If the user chose an admin template from the Dashboard, apply it now
       const routeState = location.state as { templateUrl?: string; templateName?: string } | null
       if (routeState?.templateUrl) {
         const safeUrl = fixProtocol(routeState.templateUrl)
@@ -525,7 +680,6 @@ const Editor: React.FC = () => {
               const json = await tplRes.json()
               applyFabricTemplate(json, dispatch, toast)
             } else {
-              // It's an image — use it as background
               dispatch(updateBackground({ type: 'image', image: { src: safeUrl, opacity: 100, blur: 0, scale: 1 } }))
               toast.success(`Template "${routeState.templateName || ''}" applied`)
             }
@@ -549,7 +703,6 @@ const Editor: React.FC = () => {
       }, { headers })
       if (showToast) toast.success('Saved!')
 
-      // Upload thumbnail — render via Canvas 2D (no DOM mutation, no visual flash)
       generateThumbnailBlob(elements, background, width, height).then(async blob => {
         if (!blob) return
         const fd = new FormData()
@@ -608,12 +761,10 @@ const Editor: React.FC = () => {
     toast.success('Background set!')
   }
 
-  // Apply a server template file
   const handleApplyTemplate = async (f: AssetFile) => {
     if (f.jsonData) {
       applyFabricTemplate(f.jsonData, dispatch, toast)
     } else if (f.type === 'application/json' || f.name.endsWith('.json')) {
-      // Fetch JSON
       try {
         const res = await fetch(f.url)
         const json = await res.json()
@@ -625,7 +776,6 @@ const Editor: React.FC = () => {
     }
   }
 
-  // Upload JSON template from user's local file
   const handleLocalTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -638,9 +788,7 @@ const Editor: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // ─── EXPORT TO JSON ──────────────────────────────────────
   const exportAsJson = async () => {
-    // Generate a canvas image snapshot to embed as _preview
     let _preview: string | undefined
     try {
       const thumbBlob = await generateThumbnailBlob(elements, background, width, height)
@@ -653,7 +801,6 @@ const Editor: React.FC = () => {
       }
     } catch {}
 
-    // Export in our native format — all properties preserved exactly as-is
     const exportData: any = {
       _format: 'mohini-design-hub',
       _version: '2.0',
@@ -679,12 +826,9 @@ const Editor: React.FC = () => {
   const exportAsPng = async () => {
     try {
       const { default: html2canvas } = await import('html2canvas')
-
-      // Find the inner canvas div (full 1:1 size), not the scaled wrapper
       const el = document.querySelector('.canvas-export-target') as HTMLElement
       if (!el) { toast.error('Canvas not found'); return }
 
-      // Temporarily force scale(1) so html2canvas captures at real resolution
       const prevTransform = el.style.transform
       const prevWidth = el.style.width
       const prevHeight = el.style.height
@@ -693,7 +837,7 @@ const Editor: React.FC = () => {
       el.style.height = `${height}px`
 
       const cv = await html2canvas(el, {
-        scale: 2,           // 2x for retina quality
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         width,
@@ -704,7 +848,6 @@ const Editor: React.FC = () => {
         y: 0,
       })
 
-      // Restore
       el.style.transform = prevTransform
       el.style.width = prevWidth
       el.style.height = prevHeight
@@ -722,11 +865,9 @@ const Editor: React.FC = () => {
 
   // ─── MOBILE PANEL STATE ───────────────────────────────────
   const [mobilePanel, setMobilePanel] = useState<LeftTab | RightTab | null>(null)
-  // Refs to preserve scroll position in the mobile bottom sheet
   const mobileSheetScrollRef = useRef<HTMLDivElement>(null)
   const mobileSheetScroll    = useRef(0)
   const prevMobileElId       = useRef<string | null>(null)
-  // Use matchMedia (not innerWidth) so virtual keyboard opening doesn't flip mobile/desktop layout
   const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 768px)') : null
   const [isMobileView, setIsMobileView] = useState(mq ? mq.matches : false)
 
@@ -738,7 +879,7 @@ const Editor: React.FC = () => {
   }, [])
 
   // ─── DRAGGABLE BOTTOM SHEET ───────────────────────────────
-  const [sheetHeightVh, setSheetHeightVh] = useState(65) // percent of viewport height
+  const [sheetHeightVh, setSheetHeightVh] = useState(65)
   const sheetDragRef = useRef<{ startY: number; startH: number } | null>(null)
 
   const onSheetHandleTouchStart = (e: React.TouchEvent) => {
@@ -754,7 +895,6 @@ const Editor: React.FC = () => {
   }
   const onSheetHandleTouchEnd = () => {
     sheetDragRef.current = null
-    // Snap to sensible heights or close if dragged very low
     if (sheetHeightVh < 22) { setMobilePanel(null); setSheetHeightVh(65) }
     else if (sheetHeightVh < 45) setSheetHeightVh(35)
     else if (sheetHeightVh < 70) setSheetHeightVh(65)
@@ -765,116 +905,78 @@ const Editor: React.FC = () => {
     setMobilePanel(prev => prev === panel ? null : panel)
   }
 
-  const PanelContent = ({ panel }: { panel: LeftTab | RightTab }) => {
-    if (panel === 'templates') return (
-      <div>
-        <ServerTemplatePanel
-          onApply={(f) => { handleApplyTemplate(f); setMobilePanel(null) }}
-          onSizeChange={(w,h,name)=>{
-            dispatch(setCanvasSize({width:w,height:h}))
-            const availW = window.innerWidth - 24
-            const availH = window.innerHeight - 200
-            const fitZ = Math.floor(Math.min((availW/w)*100,(availH/h)*100,60)/5)*5
-            dispatch(setZoom(Math.max(20, fitZ)))
-            toast.success(`Canvas: ${name}`)
-            setMobilePanel(null)
-          }}
-          currentW={width} currentH={height}
-        />
-        <div style={{ padding:'10px 8px', borderTop:'1px solid var(--border)' }}>
-          <div style={{ fontSize:'0.62rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--muted)', marginBottom:6 }}>Upload Your Template</div>
-          <input ref={fileInputRef} type="file" accept=".json" onChange={handleLocalTemplateUpload} style={{ display:'none' }}/>
-          <button className="btn btn-secondary btn-sm" style={{ width:'100%', justifyContent:'center', fontSize:'0.75rem' }} onClick={()=>fileInputRef.current?.click()}>
-            <Upload size={13}/> Upload JSON Template
-          </button>
-        </div>
-      </div>
-    )
-    if (panel === 'assets') return <AssetsPanel onAddImage={(url)=>{ addImageEl(url); setMobilePanel(null) }} onSetBg={(url)=>{ handleSetBackground(url); setMobilePanel(null) }}/>
-    if (panel === 'add') return (
-      <div style={{ padding:'12px 8px' }}>
-        <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Add Elements</div>
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Text</div>
-          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start', marginBottom:4 }} onClick={()=>{ addText(); setMobilePanel(null) }}>
-            <Type size={14}/> Add Text
-          </button>
-        </div>
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Shapes</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:5, padding:'0 4px' }}>
-            {[
-              { type:'rect',        label:'Rect',     preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:2}}/> },
-              { type:'circle',      label:'Circle',   preview:<div style={{width:14,height:14,background:'currentColor',borderRadius:'50%'}}/> },
-              { type:'triangle',    label:'Triangle', preview:<div style={{width:0,height:0,borderLeft:'7px solid transparent',borderRight:'7px solid transparent',borderBottom:'14px solid currentColor'}}/> },
-              { type:'diamond',     label:'Diamond',  preview:<div style={{width:12,height:12,background:'currentColor',transform:'rotate(45deg)'}}/> },
-              { type:'star',        label:'Star',     preview:<span style={{fontSize:14,lineHeight:'1'}}>★</span> },
-              { type:'pentagon',    label:'Pentagon', preview:<span style={{fontSize:13,lineHeight:'1'}}>⬠</span> },
-              { type:'hexagon',     label:'Hexagon',  preview:<span style={{fontSize:13,lineHeight:'1'}}>⬡</span> },
-              { type:'arrow_right', label:'Arrow',    preview:<span style={{fontSize:13,lineHeight:'1'}}>➤</span> },
-              { type:'cross',       label:'Cross',    preview:<span style={{fontSize:15,lineHeight:'1',fontWeight:700}}>✚</span> },
-              { type:'parallelogram',label:'Parallelogram',preview:<span style={{fontSize:12,lineHeight:'1'}}>▱</span> },
-              { type:'trapezoid',   label:'Trapezoid',preview:<span style={{fontSize:12,lineHeight:'1'}}>⏢</span> },
-              { type:'heart',       label:'Heart',    preview:<span style={{fontSize:14,lineHeight:'1'}}>♥</span> },
-            ].map(({type, label, preview}) => (
-              <button key={type} className="btn btn-secondary btn-sm"
-                style={{ flexDirection:'column', gap:3, padding:'6px 4px', fontSize:'0.58rem', height:48, justifyContent:'center', alignItems:'center' }}
-                onClick={()=>{ addShape(type); setMobilePanel(null) }}>
-                {preview}{label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:'0.6875rem', fontWeight:700, color:'var(--muted)', textTransform:'uppercase', padding:'0 8px', marginBottom:6 }}>Image</div>
-          <button className="btn btn-secondary" style={{ width:'100%', justifyContent:'flex-start' }}
-            onClick={()=>{ const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=(ev)=>{ handleImageFileUpload(ev as any, ()=>setMobilePanel(null)) }; inp.click() }}>
-            <Upload size={14}/> Upload Image from Device
-          </button>
-        </div>
-      </div>
-    )
-    if (panel === 'size') return (
-      <div style={{ padding:'12px 8px' }}>
-        <div className="panel-title" style={{ padding:'0 8px', marginBottom:8 }}>Page Size</div>
-        <TemplateSelector currentW={width} currentH={height} onSelectTemplate={(w,h,name)=>{
-          dispatch(setCanvasSize({width:w,height:h}))
-          const availW=window.innerWidth-24, availH=window.innerHeight-200
-          dispatch(setZoom(Math.max(20,Math.floor(Math.min((availW/w)*100,(availH/h)*100,60)/5)*5)))
-          toast.success(`Canvas: ${name}`)
-          setMobilePanel(null)
-        }}/>
-      </div>
-    )
-    if (panel === 'layers') return (
-      <LayersPanel elements={elements} selectedId={selectedElementId}
-        onSelect={id=>dispatch(selectElement(id))}
-        onToggleVisibility={id=>dispatch(toggleVisibility(id))}
-        onToggleLock={id=>dispatch(toggleLock(id))}
-        onBringForward={id=>dispatch(bringForward(id))}
-        onSendBackward={id=>dispatch(sendBackward(id))}
-      />
-    )
-    if (panel === 'properties') return selectedElement ? (
-      <PropertiesPanelEnhanced
-        element={selectedElement}
-        onUpdate={updates=>{ dispatch(updateElement({id:selectedElement.id,updates})); clearTimeout((window as any).__ct); (window as any).__ct=setTimeout(()=>dispatch(commitUpdate()),600) }}
-        onDelete={()=>{ dispatch(deleteElement(selectedElement.id)); setMobilePanel(null) }}
-        onDuplicate={()=>dispatch(duplicateElement(selectedElement.id))}
-        onLock={()=>dispatch(toggleLock(selectedElement.id))}
-        onToggleVisibility={()=>dispatch(toggleVisibility(selectedElement.id))}
-        onBringForward={()=>dispatch(bringForward(selectedElement.id))}
-        onSendBackward={()=>dispatch(sendBackward(selectedElement.id))}
-      />
-    ) : (
-      <div style={{ padding:'2rem 1rem', textAlign:'center', color:'var(--muted)' }}>
-        <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>👆</div>
-        <p style={{ fontSize:'0.875rem', lineHeight:1.5 }}>Tap an element on the canvas to edit its properties</p>
-      </div>
-    )
-    if (panel === 'background') return <BackgroundEditor background={background} onUpdate={bg=>dispatch(updateBackground(bg))}/>
-    return null
-  }
+  const closeMobilePanel = useCallback(() => {
+    setMobilePanel(null);
+    setSheetHeightVh(65);
+  }, []);
+
+  // ─── STABLE CALLBACKS FOR PANEL CONTENT ───────────────────
+  const handleAddTextAndClose = useCallback(() => {
+    addText();
+    closeMobilePanel();
+  }, [addText, closeMobilePanel]);
+
+  const handleAddShapeAndClose = useCallback((shapeType: string) => {
+    addShape(shapeType);
+    closeMobilePanel();
+  }, [addShape, closeMobilePanel]);
+
+  const handleImageUploadWithClose = useCallback((e: React.ChangeEvent<HTMLInputElement>, onDone?: () => void) => {
+    handleImageFileUpload(e, () => {
+      onDone?.();
+      closeMobilePanel();
+    });
+  }, [handleImageFileUpload, closeMobilePanel]);
+
+  const handleSizeChangeAndClose = useCallback((w: number, h: number, name: string) => {
+    dispatch(setCanvasSize({width:w, height:h}));
+    const availW = window.innerWidth - 24;
+    const availH = window.innerHeight - 200;
+    const fitZ = Math.floor(Math.min((availW/w)*100,(availH/h)*100,60)/5)*5;
+    dispatch(setZoom(Math.max(20, fitZ)));
+    toast.success(`Canvas: ${name}`);
+    closeMobilePanel();
+  }, [dispatch, closeMobilePanel]);
+
+  const handleUpdateElement = useCallback((updates: any) => {
+    if (!selectedElementId) return;
+    dispatch(updateElement({id: selectedElementId, updates}));
+    clearTimeout((window as any).__ct);
+    (window as any).__ct = setTimeout(() => dispatch(commitUpdate()), 600);
+  }, [selectedElementId, dispatch]);
+
+  const handleDeleteElement = useCallback((id: string) => {
+    dispatch(deleteElement(id));
+    closeMobilePanel();
+  }, [dispatch, closeMobilePanel]);
+
+  const handleDuplicateElement = useCallback((id: string) => {
+    dispatch(duplicateElement(id));
+  }, [dispatch]);
+
+  const handleToggleVisibility = useCallback((id: string) => {
+    dispatch(toggleVisibility(id));
+  }, [dispatch]);
+
+  const handleToggleLock = useCallback((id: string) => {
+    dispatch(toggleLock(id));
+  }, [dispatch]);
+
+  const handleBringForward = useCallback((id: string) => {
+    dispatch(bringForward(id));
+  }, [dispatch]);
+
+  const handleSendBackward = useCallback((id: string) => {
+    dispatch(sendBackward(id));
+  }, [dispatch]);
+
+  const handleSelectElement = useCallback((id: string | null) => {
+    dispatch(selectElement(id));
+  }, [dispatch]);
+
+  const handleUpdateBackground = useCallback((bg: Background) => {
+    dispatch(updateBackground(bg));
+  }, [dispatch]);
 
   if (loading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
@@ -892,7 +994,6 @@ const Editor: React.FC = () => {
       {/* Mobile Top Bar */}
       <header style={{ height:48, background:'#fff', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200, boxShadow:'0 1px 0 #e5e7eb' }}>
         <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:7, padding:7, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
-        {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
           <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
         </div>
@@ -903,7 +1004,7 @@ const Editor: React.FC = () => {
         </button>
       </header>
 
-      {/* Canvas fills remaining space - centered both ways */}
+      {/* Canvas fills remaining space */}
       <main style={{ flex:1, overflow:'auto', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px 12px', background:'var(--bg)' }}>
         <div style={{ position:'relative', flexShrink: 0 }}>
           <div style={{ boxShadow:'0 4px 40px rgba(0,0,0,0.25)', borderRadius:2 }} className="canvas-render-target">
@@ -919,13 +1020,11 @@ const Editor: React.FC = () => {
         </div>
       </main>
 
-      {/* Bottom Sheet Panel (slides up, draggable) */}
+      {/* Bottom Sheet Panel */}
       {mobilePanel && (
         <>
-          {/* Backdrop — only captures taps outside the sheet */}
-          <div onClick={()=>{ setMobilePanel(null); setSheetHeightVh(65) }}
+          <div onClick={closeMobilePanel}
             style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:299, top:48 }}/>
-          {/* Sheet */}
           <div style={{
             position:'fixed', bottom:64, left:0, right:0, zIndex:300,
             background:'#fff', borderRadius:'20px 20px 0 0',
@@ -933,7 +1032,6 @@ const Editor: React.FC = () => {
             height:`${sheetHeightVh}vh`, display:'flex', flexDirection:'column',
             animation:'slideUp 0.25s ease', transition:'height 0.1s ease',
           }}>
-            {/* Drag handle — touch this to resize the sheet */}
             <div
               onTouchStart={onSheetHandleTouchStart}
               onTouchMove={onSheetHandleTouchMove}
@@ -946,28 +1044,32 @@ const Editor: React.FC = () => {
               style={{ overflowY:'auto', flex:1, paddingBottom:8 }}
               onScroll={() => { mobileSheetScroll.current = mobileSheetScrollRef.current?.scrollTop || 0 }}
             >
-              {/* Properties panel rendered DIRECTLY (not via PanelContent) to prevent
-                  React unmounting it on every Editor re-render since PanelContent is
-                  defined inside this component and changes identity each render. */}
-              {mobilePanel === 'properties'
-                ? (selectedElement
-                    ? <PropertiesPanelEnhanced
-                        element={selectedElement}
-                        onUpdate={updates=>{ dispatch(updateElement({id:selectedElement.id,updates})); clearTimeout((window as any).__ct); (window as any).__ct=setTimeout(()=>dispatch(commitUpdate()),600) }}
-                        onDelete={()=>{ dispatch(deleteElement(selectedElement.id)); setMobilePanel(null) }}
-                        onDuplicate={()=>dispatch(duplicateElement(selectedElement.id))}
-                        onLock={()=>dispatch(toggleLock(selectedElement.id))}
-                        onToggleVisibility={()=>dispatch(toggleVisibility(selectedElement.id))}
-                        onBringForward={()=>dispatch(bringForward(selectedElement.id))}
-                        onSendBackward={()=>dispatch(sendBackward(selectedElement.id))}
-                      />
-                    : <div style={{ padding:'2rem 1rem', textAlign:'center', color:'var(--muted)' }}>
-                        <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>👆</div>
-                        <p style={{ fontSize:'0.875rem', lineHeight:1.5 }}>Tap an element on the canvas to edit its properties</p>
-                      </div>
-                  )
-                : <PanelContent panel={mobilePanel}/>
-              }
+              <PanelContent
+                panel={mobilePanel}
+                selectedElement={selectedElement}
+                onAddImage={addImageEl}
+                onSetBg={handleSetBackground}
+                onApplyTemplate={handleApplyTemplate}
+                onSizeChange={handleSizeChangeAndClose}
+                onAddText={handleAddTextAndClose}
+                onAddShape={handleAddShapeAndClose}
+                onImageUpload={handleImageUploadWithClose}
+                currentW={width}
+                currentH={height}
+                background={background}
+                onUpdateBackground={handleUpdateBackground}
+                elements={elements}
+                selectedElementId={selectedElementId}
+                onSelectElement={handleSelectElement}
+                onToggleVisibility={handleToggleVisibility}
+                onToggleLock={handleToggleLock}
+                onBringForward={handleBringForward}
+                onSendBackward={handleSendBackward}
+                onUpdateElement={handleUpdateElement}
+                onDeleteElement={handleDeleteElement}
+                onDuplicateElement={handleDuplicateElement}
+                onClosePanel={closeMobilePanel}
+              />
             </div>
           </div>
         </>
@@ -979,7 +1081,6 @@ const Editor: React.FC = () => {
         display:'flex', flexDirection:'column', flexShrink:0, zIndex:400,
         paddingBottom:'env(safe-area-inset-bottom)',
       }}>
-        {/* Tool buttons row */}
         <div style={{ height:58, display:'flex', alignItems:'center' }}>
           {([
             ['templates', <Layout size={18}/>,     'Templates'],
@@ -1005,16 +1106,15 @@ const Editor: React.FC = () => {
           ))}
         </div>
 
-       <div style={{ borderTop:'1px solid var(--border)', padding:'4px 0', display:'flex', justifyContent:'center', alignItems:'center' }}>
-  <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
-    style={{ display:'flex', alignItems:'center', gap:5, textDecoration:'none' }}>
-    <img src="/assets/gobt_logo.png" alt="GOBT" style={{ height:22, objectFit:'cover' }} />
-    <span style={{ fontSize:'0.6rem', color:'var(--muted)', fontWeight:500 }}>Powered by GOBT</span>
-  </a>
-</div>
+        <div style={{ borderTop:'1px solid var(--border)', padding:'4px 0', display:'flex', justifyContent:'center', alignItems:'center' }}>
+          <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
+            style={{ display:'flex', alignItems:'center', gap:5, textDecoration:'none' }}>
+            <img src="/assets/gobt_logo.png" alt="GOBT" style={{ height:22, objectFit:'cover' }} />
+            <span style={{ fontSize:'0.6rem', color:'var(--muted)', fontWeight:500 }}>Powered by GOBT</span>
+          </a>
+        </div>
       </nav>
 
-      {/* Slide-up animation */}
       <style>{`
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
@@ -1045,7 +1145,6 @@ const Editor: React.FC = () => {
           {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z}>{z}%</option>)}
         </select>
 
-        {/* Mohini Logo — centered absolutely */}
         <div style={{ position:'absolute', left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center' }}>
           <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:80, objectFit:'contain' }} />
         </div>
@@ -1091,7 +1190,6 @@ const Editor: React.FC = () => {
                   onApply={handleApplyTemplate}
                   onSizeChange={(w,h,name)=>{
                     dispatch(setCanvasSize({width:w,height:h}))
-                    // Recalculate zoom to fit new size
                     const isMob = isMobileView
                     const availW = window.innerWidth - (isMob ? 24 : 248 + 256 + 80)
                     const availH = window.innerHeight - (isMob ? 120 : 56 + 80)
@@ -1166,10 +1264,10 @@ const Editor: React.FC = () => {
             {leftTab==='layers' && (
               <LayersPanel elements={elements} selectedId={selectedElementId}
                 onSelect={id=>{ dispatch(selectElement(id)); setRightTab('properties') }}
-                onToggleVisibility={id=>dispatch(toggleVisibility(id))}
-                onToggleLock={id=>dispatch(toggleLock(id))}
-                onBringForward={id=>dispatch(bringForward(id))}
-                onSendBackward={id=>dispatch(sendBackward(id))}
+                onToggleVisibility={handleToggleVisibility}
+                onToggleLock={handleToggleLock}
+                onBringForward={handleBringForward}
+                onSendBackward={handleSendBackward}
               />
             )}
           </div>
@@ -1192,7 +1290,6 @@ const Editor: React.FC = () => {
             </div>
           </div>
 
-          {/* GOBT Logo — bottom center of canvas area */}
           <div style={{ position:'fixed', bottom:16, left: 248 + 16, display:'flex', alignItems:'center', zIndex:50 }}>
             <a href="https://gobt.in" target="_blank" rel="noopener noreferrer"
               style={{ display:'flex', alignItems:'center', gap:6, textDecoration:'none', background:'rgba(255,255,255,0.92)', padding:'5px 10px', borderRadius:20, boxShadow:'0 2px 8px rgba(0,0,0,0.12)', border:'1px solid var(--border)' }}>
@@ -1214,12 +1311,12 @@ const Editor: React.FC = () => {
             ))}
           </div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {rightTab==='background' && <BackgroundEditor background={background} onUpdate={bg=>dispatch(updateBackground(bg))}/>}
+            {rightTab==='background' && <BackgroundEditor background={background} onUpdate={handleUpdateBackground}/>}
             {rightTab==='properties' && (
               selectedElement ? (
                 <PropertiesPanelEnhanced
                   element={selectedElement}
-                  onUpdate={updates=>{ dispatch(updateElement({id:selectedElement.id,updates})); clearTimeout((window as any).__ct); (window as any).__ct=setTimeout(()=>dispatch(commitUpdate()),600) }}
+                  onUpdate={handleUpdateElement}
                   onDelete={()=>dispatch(deleteElement(selectedElement.id))}
                   onDuplicate={()=>dispatch(duplicateElement(selectedElement.id))}
                   onLock={()=>dispatch(toggleLock(selectedElement.id))}
