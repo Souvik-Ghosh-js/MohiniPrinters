@@ -143,18 +143,45 @@ const ThumbnailElement: React.FC<{ el: CanvasElement }> = ({ el }) => {
   if (el.type === 'shape') {
     const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
     const clip = SHAPE_CLIPS[st]
+    const bg = p.fill || '#2980b9'
+    const strokeWidth = p.stroke?.width || 0
+    const strokeColor = p.stroke?.color || '#000000'
+
     if (st === 'heart') {
       return (
         <div style={wrapStyle}>
-          <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
-            <path d="M50,85 C50,85 10,60 10,35 A20,20,0,0,1,50,25 A20,20,0,0,1,90,35 C90,60 50,85 50,85 Z" fill={p.fill || '#e53e3e'} />
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+            <path d="M50,85 C50,85 10,60 10,35 A20,20,0,0,1,50,25 A20,20,0,0,1,90,35 C90,60 50,85 50,85 Z"
+              fill={bg} stroke={strokeWidth > 0 ? strokeColor : undefined} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
           </svg>
         </div>
       )
     }
+
+    if (clip) {
+      const matches = clip.match(/polygon\((.*)\)/)
+      if (matches) {
+        const points = matches[1].replace(/%/g, '')
+        return (
+          <div style={wrapStyle}>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+              <polygon points={points} fill={bg === 'transparent' ? 'none' : bg} stroke={strokeWidth > 0 ? strokeColor : undefined} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
+            </svg>
+          </div>
+        )
+      }
+    }
+
     return (
       <div style={wrapStyle}>
-        <div style={{ width: '100%', height: '100%', background: p.fill || '#2980b9', borderRadius: st === 'circle' ? '50%' : (p.borderRadius || 0), clipPath: clip }} />
+        <div style={{
+          width: '100%',
+          height: '100%',
+          background: bg === 'transparent' ? 'transparent' : bg,
+          borderRadius: st === 'circle' ? '50%' : (p.borderRadius || 0),
+          border: strokeWidth > 0 ? `${strokeWidth}px solid ${strokeColor}` : 'none',
+          boxSizing: 'border-box',
+        }} />
       </div>
     )
   }
@@ -169,14 +196,14 @@ const TemplateThumbnail: React.FC<Props> = ({ jsonData, width = 160, height = 10
   // If the JSON has a _preview snapshot, show that directly (pixel-perfect)
   if (jsonData?._preview) {
     return (
-      <div style={{ width, height, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
-        <img src={jsonData._preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      <div style={{ width, height, overflow: 'hidden', position: 'relative', flexShrink: 0, background: '#f8fafc' }}>
+        <img src={jsonData._preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
       </div>
     )
   }
 
-  // Scale to cover: fill the entire thumbnail area (crop overflow, no gray bars)
-  const scale = Math.max(width / cw, height / ch)
+  // Scale to contain: show the entire design (no cropping)
+  const scale = Math.min(width / cw, height / ch)
   // Center the scaled canvas so we show the middle, not the top-left corner
   const offsetX = (width  - cw * scale) / 2
   const offsetY = (height - ch * scale) / 2

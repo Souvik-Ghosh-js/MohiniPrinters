@@ -177,9 +177,9 @@ const Dashboard: React.FC = () => {
                 onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
               >
-                <div style={{ width: '100%', height: 150, overflow: 'hidden', position: 'relative', background: '#e8f0f7' }}>
+                <div style={{ width: '100%', height: 150, overflow: 'hidden', position: 'relative', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {p.thumbnail_url
-                    ? <img src={fixProtocol(p.thumbnail_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    ? <img src={fixProtocol(p.thumbnail_url)} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                     : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, hsl(${(p.id * 47) % 360},55%,72%) 0%, hsl(${(p.id * 47 + 60) % 360},55%,60%) 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'rgba(255,255,255,0.7)', userSelect: 'none' }}>{(p.title || 'U')[0].toUpperCase()}</span>
                       </div>
@@ -229,11 +229,11 @@ const Dashboard: React.FC = () => {
                         onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = 'var(--shadow-lg)')}
                         onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = 'var(--shadow)')}
                       >
-                        <div style={{ width: '100%', height: 130, overflow: 'hidden' }}>
+                        <div style={{ width: '100%', height: 130, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
                           {tpl.jsonData
                             ? <TemplateThumbnail jsonData={tpl.jsonData} width={300} height={130} />
                             : (tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i))
-                              ? <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ? <img src={tpl.url} alt={tpl.displayName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                               : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #e8f4f8 0%, #dce8f0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layout size={32} color="#cbd5e1" /></div>
                           }
                         </div>
@@ -300,11 +300,11 @@ const Dashboard: React.FC = () => {
                                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand)' }}
                                   onMouseLeave={e => { e.currentTarget.style.borderColor = selectedTemplate?.name === tpl.name ? 'var(--brand)' : 'var(--border)' }}
                                 >
-                                  <div style={{ height: 90, overflow: 'hidden' }}>
+                                  <div style={{ height: 90, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
                                     {tpl.jsonData
                                       ? <TemplateThumbnail jsonData={tpl.jsonData} width={200} height={90} />
                                       : (tpl.type.startsWith('image/') || tpl.url.match(/\.(jpg|jpeg|png|webp)$/i))
-                                        ? <img src={tpl.url} alt={tpl.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ? <img src={tpl.url} alt={tpl.displayName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                                         : <div style={{ width: '100%', height: '100%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layout size={22} style={{ opacity: 0.3 }} /></div>
                                     }
                                   </div>

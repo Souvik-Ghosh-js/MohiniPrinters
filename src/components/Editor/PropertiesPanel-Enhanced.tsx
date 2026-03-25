@@ -432,9 +432,15 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
       {/* ═══ SHAPE PROPERTIES ═══ */}
       {element.type === 'shape' && <>
         <Section title="Fill">
-          <Field label="Color">
-            <input type="color" value={p.fill || '#1dc48d'} onChange={e => up('fill', e.target.value)} style={{ width: '100%', height: 36, border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
-          </Field>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Field label="Color">
+              <input type="color" value={p.fill === 'transparent' ? '#000000' : (p.fill || '#1dc48d')} disabled={p.fill === 'transparent'} onChange={e => up('fill', e.target.value)} style={{ width: '100%', minWidth: '40px', height: 36, border: '1px solid var(--border)', borderRadius: 6, cursor: p.fill === 'transparent' ? 'not-allowed' : 'pointer', padding: 2, opacity: p.fill === 'transparent' ? 0.5 : 1 }} />
+            </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', marginTop: 16 }}>
+              <input type="checkbox" checked={p.fill === 'transparent'} onChange={e => up('fill', e.target.checked ? 'transparent' : '#1dc48d')} />
+              No Fill
+            </label>
+          </div>
           <div style={{ marginTop: 8 }}>
             <SliderField label="Border Radius" value={p.borderRadius || 0} min={0} max={500} onChange={v => up('borderRadius', v)} unit="px" />
           </div>

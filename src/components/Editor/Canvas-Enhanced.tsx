@@ -529,26 +529,42 @@ const CanvasEnhanced: React.FC<Props> = ({
     const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
     const clip = SHAPE_CLIPS[st]
     const bg = p.fill || '#2980b9'
-    const strokeStyle = p.stroke ? `${p.stroke.width}px solid ${p.stroke.color}` : undefined
+    
+    const strokeWidth = p.stroke?.width || 0
+    const strokeColor = p.stroke?.color || '#000000'
+    const strokeStyle = strokeWidth > 0 ? `${strokeWidth}px solid ${strokeColor}` : undefined
 
     if (st === 'heart') {
       // SVG heart since clip-path path() has limited support
       return (
-        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
           <path d="M50,85 C50,85 10,60 10,35 A20,20,0,0,1,50,25 A20,20,0,0,1,90,35 C90,60 50,85 50,85 Z"
-            fill={bg} stroke={p.stroke?.color} strokeWidth={p.stroke?.width} />
+            fill={bg} stroke={strokeWidth > 0 ? strokeColor : undefined} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
         </svg>
       )
     }
 
+    if (clip) {
+      // It's a polygon shape
+      const matches = clip.match(/polygon\((.*)\)/)
+      if (matches) {
+        const points = matches[1].replace(/%/g, '')
+        return (
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+            <polygon points={points} fill={bg} stroke={strokeWidth > 0 ? strokeColor : undefined} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
+          </svg>
+        )
+      }
+    }
+
+    // Must be circle or rect
     return (
       <div style={{
         width: '100%',
         height: '100%',
-        background: bg,
-        borderRadius: st === 'circle' ? '50%' : (st === 'rect' ? (p.borderRadius || 0) : 0),
-        clipPath: clip,
-        border: (!clip && st !== 'circle') ? strokeStyle : undefined,
+        background: bg === 'transparent' ? 'transparent' : bg,
+        borderRadius: st === 'circle' ? '50%' : (p.borderRadius || 0),
+        border: strokeStyle,
         boxSizing: 'border-box',
       }} />
     )
