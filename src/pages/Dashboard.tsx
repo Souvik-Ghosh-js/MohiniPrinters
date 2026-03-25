@@ -124,19 +124,19 @@ const Dashboard: React.FC = () => {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
       {/* Header */}
-      <header style={{ background: 'var(--corporate)', padding: '0 2rem', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
+      <header style={{ background: '#fff', padding: '0 2rem', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 0 #e5e7eb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height: 46, objectFit: 'contain' }} />
-          <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#fff' }}>Mohini Design Hub</span>
+          <span className="header-logo-text" style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1a1d2e' }}>Mohini Design Hub</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span className="header-greeting" style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
+          <span className="header-greeting" style={{ color: '#6b7280', fontSize: '0.875rem' }}>Hello, {user?.name || 'Designer'}</span>
           {user?.is_admin && (
-            <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => navigate('/admin')}>
+            <button className="btn btn-sm" style={{ background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb' }} onClick={() => navigate('/admin')}>
               <Settings size={14} /> Admin
             </button>
           )}
-          <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => { dispatch(logout()); navigate('/login') }}>
+          <button className="btn btn-sm" style={{ background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb' }} onClick={() => { dispatch(logout()); navigate('/login') }}>
             <LogOut size={14} /> Sign out
           </button>
         </div>

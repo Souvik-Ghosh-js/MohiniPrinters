@@ -77,7 +77,8 @@ const generateThumbnailBlob = async (
     ctx.save(); ctx.globalAlpha = (g.opacity??100)/100; ctx.fillStyle = grad; ctx.fillRect(0,0,THUMB_W,THUMB_H); ctx.restore()
   } else if (background.type === 'image' && background.image?.src) {
     await new Promise<void>(res => {
-      const img = new Image(); img.crossOrigin='anonymous'
+      const img = new Image()
+      // No crossOrigin — images are served from our own backend, avoid CORS preflight failures
       img.onload = () => { ctx.drawImage(img,0,0,THUMB_W,THUMB_H); res() }
       img.onerror = () => res()
       img.src = background.image!.src
@@ -100,7 +101,8 @@ const generateThumbnailBlob = async (
 
     if (el.type === 'image' && p.src) {
       await new Promise<void>(res => {
-        const img = new Image(); img.crossOrigin='anonymous'
+        const img = new Image()
+        // No crossOrigin — images served from our own backend, avoids CORS failures
         img.onload = () => {
           ctx.save()
           if (p.borderRadius) {
@@ -154,7 +156,10 @@ const generateThumbnailBlob = async (
     ctx.restore()
   }
 
-  return new Promise(res => cvs.toBlob(b => res(b), 'image/jpeg', 0.88))
+  return new Promise(res => {
+    try { cvs.toBlob(b => res(b), 'image/jpeg', 0.88) }
+    catch { res(null) }  // tainted canvas — can't export
+  })
 }
 
 // ─── FABRIC JSON → OUR ELEMENT FORMAT ────────────────────────
@@ -448,12 +453,7 @@ const Editor: React.FC = () => {
 
   useEffect(() => { fetchProject() }, [projectId])
 
-  // Auto-save every 30s
-  useEffect(() => {
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { if (!loading) saveProject(false) }, 30000)
-    return () => clearTimeout(saveTimer)
-  }, [elements, background, title])
+  // Auto-save disabled — only save explicitly via Save button
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -869,14 +869,14 @@ const Editor: React.FC = () => {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#e8eaf0', overflow:'hidden', position:'relative' }}>
 
       {/* Mobile Top Bar */}
-      <header style={{ height:48, background:'var(--corporate)', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200, boxShadow:'0 2px 8px rgba(0,0,0,0.18)' }}>
-        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:7, padding:7, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
+      <header style={{ height:48, background:'#fff', display:'flex', alignItems:'center', gap:6, padding:'0 8px', flexShrink:0, zIndex:200, boxShadow:'0 1px 0 #e5e7eb' }}>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:7, padding:7, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
         {/* Mohini Logo - top center */}
         <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
           <img src="/assets/mohini.png" alt="Mohini Design Hub" style={{ height:34, objectFit:'contain' }} />
         </div>
-        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
-        <button style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:30, height:30, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0}><Undo size={15}/></button>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:30, height:30, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
         <button style={{ background:'var(--gold)', border:'none', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:700, display:'flex', alignItems:'center', gap:5 }} onClick={()=>saveProject(true)} disabled={saving}>
           {saving?'…':<><Save size={13}/> Save</>}
         </button>
@@ -983,20 +983,20 @@ const Editor: React.FC = () => {
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'var(--bg)', overflow:'hidden' }}>
 
       {/* ─── TOP TOOLBAR ─── */}
-      <header style={{ height:56, background:'var(--corporate)', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100, position:'relative', boxShadow:'0 2px 10px rgba(0,0,0,0.18)' }}>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:7, padding:8, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
-        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
-        <input value={title} onChange={e=>setTitle(e.target.value)} onBlur={()=>saveProject(false)}
-          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'#fff', background:'transparent', outline:'none', minWidth:120, maxWidth:200 }}/>
-        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:32, height:32, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0} title="Undo"><Undo size={16}/></button>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:32, height:32, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1} title="Redo"><Redo size={16}/></button>
-        <div style={{ width:1, height:28, background:'rgba(255,255,255,0.2)' }}/>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.max(10,zoom-10)))}><ZoomOut size={15}/></button>
-        <span style={{ fontSize:'0.8rem', fontWeight:700, color:'rgba(255,255,255,0.9)', minWidth:38, textAlign:'center' }}>{zoom}%</span>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'none', borderRadius:6, width:30, height:30, color:'#fff', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.min(200,zoom+10)))}><ZoomIn size={15}/></button>
-        <select value={zoom} onChange={e=>dispatch(setZoom(+e.target.value))} style={{ fontSize:'0.75rem', border:'1px solid rgba(255,255,255,0.25)', borderRadius:6, padding:'4px 6px', background:'rgba(255,255,255,0.1)', color:'#fff', cursor:'pointer' }}>
-          {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z} style={{ background:'#2C3E50' }}>{z}%</option>)}
+      <header style={{ height:56, background:'#fff', display:'flex', alignItems:'center', gap:8, padding:'0 12px', flexShrink:0, zIndex:100, position:'relative', boxShadow:'0 1px 0 #e5e7eb' }}>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:7, padding:8, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center' }} onClick={()=>navigate('/dashboard')}><ArrowLeft size={18}/></button>
+        <div style={{ width:1, height:28, background:'#e5e7eb' }}/>
+        <input value={title} onChange={e=>setTitle(e.target.value)}
+          style={{ border:'none', fontSize:'0.9375rem', fontWeight:700, color:'#1a1d2e', background:'transparent', outline:'none', minWidth:120, maxWidth:200 }}/>
+        <div style={{ width:1, height:28, background:'#e5e7eb' }}/>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:32, height:32, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(undo())} disabled={historyIndex<=0} title="Undo"><Undo size={16}/></button>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:32, height:32, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1} title="Redo"><Redo size={16}/></button>
+        <div style={{ width:1, height:28, background:'#e5e7eb' }}/>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:30, height:30, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.max(10,zoom-10)))}><ZoomOut size={15}/></button>
+        <span style={{ fontSize:'0.8rem', fontWeight:700, color:'#374151', minWidth:38, textAlign:'center' }}>{zoom}%</span>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:30, height:30, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(setZoom(Math.min(200,zoom+10)))}><ZoomIn size={15}/></button>
+        <select value={zoom} onChange={e=>dispatch(setZoom(+e.target.value))} style={{ fontSize:'0.75rem', border:'1px solid #d1d5db', borderRadius:6, padding:'4px 6px', background:'#f9fafb', color:'#374151', cursor:'pointer' }}>
+          {[25,33,50,67,75,100,125,150,200].map(z=><option key={z} value={z}>{z}%</option>)}
         </select>
 
         {/* Mohini Logo — centered absolutely */}
@@ -1005,11 +1005,11 @@ const Editor: React.FC = () => {
         </div>
 
         <div style={{ flex:1 }}/>
-        <span style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.6)', background:'rgba(255,255,255,0.1)', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsJson} title="Export as JSON template">
+        <span style={{ fontSize:'0.7rem', color:'#6b7280', background:'#f3f4f6', padding:'4px 8px', borderRadius:6 }}>{width}×{height}</span>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'1px solid #e5e7eb', borderRadius:7, padding:'6px 12px', color:'#374151', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsJson} title="Export as JSON template">
           <FileJson size={14}/> JSON
         </button>
-        <button style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsPng} title="Export as PNG">
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'1px solid #e5e7eb', borderRadius:7, padding:'6px 12px', color:'#374151', cursor:'pointer', fontSize:'0.8125rem', fontWeight:600, display:'flex', alignItems:'center', gap:5 }} onClick={exportAsPng} title="Export as PNG">
           <Download size={14}/> PNG
         </button>
         <button style={{ background:'var(--gold)', border:'none', borderRadius:7, padding:'6px 14px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:700, display:'flex', alignItems:'center', gap:5, boxShadow:'0 2px 8px rgba(201,162,39,0.4)' }} onClick={()=>saveProject(true)} disabled={saving}>

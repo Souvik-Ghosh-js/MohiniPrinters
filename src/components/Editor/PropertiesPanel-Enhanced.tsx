@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useLayoutEffect } from 'react'
 import { Trash2, Copy, Lock, Unlock, Eye, EyeOff, ChevronUp, ChevronDown, Languages } from 'lucide-react'
 import { CanvasElement } from '../../types/canvas'
 
@@ -89,6 +89,24 @@ const SliderField: React.FC<{ label: string; value: number; min: number; max: nu
 
 const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete, onDuplicate, onLock, onToggleVisibility, onBringForward, onSendBackward }) => {
   const p = element.properties
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const savedScroll = useRef(0)
+  const prevElId = useRef(element.id)
+
+  // Preserve scroll position across re-renders caused by property updates.
+  // Reset to 0 only when a different element is selected.
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    if (prevElId.current !== element.id) {
+      prevElId.current = element.id
+      savedScroll.current = 0
+      el.scrollTop = 0
+    } else {
+      el.scrollTop = savedScroll.current
+    }
+  })
+
   const [showTranslit, setShowTranslit]   = useState(false)
   const [translitInput, setTranslitInput] = useState('')
   const [translitLoading, setTranslitLoading] = useState(false)
@@ -117,7 +135,9 @@ const PropertiesPanelEnhanced: React.FC<Props> = ({ element, onUpdate, onDelete,
   const inputStyle: React.CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.8125rem', background: '#fff', color: 'var(--text)' }
 
   return (
-    <div style={{ overflowY: 'auto', height: '100%' }}>
+    <div ref={scrollRef} style={{ overflowY: 'auto', height: '100%' }}
+      onScroll={() => { savedScroll.current = scrollRef.current?.scrollTop || 0 }}
+    >
       {/* Actions */}
       <div className="panel-section" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button className="btn btn-ghost btn-icon btn-sm" title="Duplicate" onClick={onDuplicate}><Copy size={14} /></button>

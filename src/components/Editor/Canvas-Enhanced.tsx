@@ -29,13 +29,21 @@ const SHAPE_CLIPS: Record<string, string> = {
 }
 
 // ─── CURVED TEXT SVG ─────────────────────────────────────────
-const CurvedText: React.FC<{ text: string; width: number; height: number; style: React.CSSProperties; curve: string; curveAmount: number }> = ({
-  text, width, height, style, curve, curveAmount
-}) => {
+interface GradientDef { type?: string; angle?: number; colors?: string[] }
+interface ShadowDef { offsetX?: number; offsetY?: number; blur?: number; color?: string }
+
+const CurvedText: React.FC<{
+  text: string; width: number; height: number; style: React.CSSProperties
+  curve: string; curveAmount: number
+  gradient?: GradientDef; shadow?: ShadowDef
+}> = ({ text, width, height, style, curve, curveAmount, gradient, shadow }) => {
   const amount = curveAmount || 50
   const w = width
   const h = height
-  const id = `curve-${Math.abs(text.length * 7 + amount)}`
+  const uid = `ct-${Math.abs(text.length * 7 + amount + (gradient ? 1 : 0))}`
+  const pathId    = `${uid}-path`
+  const gradId    = `${uid}-grad`
+  const filterId  = `${uid}-filt`
 
   const buildPath = () => {
     if (curve === 'arc') {
@@ -50,26 +58,62 @@ const CurvedText: React.FC<{ text: string; width: number; height: number; style:
     return `M 0,${h/2} L ${w},${h/2}`
   }
 
-  const fontSize  = (style.fontSize as string || '24px').replace('px', '')
+  const fontSize   = (style.fontSize as string || '24px').replace('px', '')
   const fontFamily = style.fontFamily as string || 'Arial'
-  const fill = (style.color as string) || '#000'
+  const baseFill   = (style.color as string) || '#000'
   const fontWeight = style.fontWeight as string || '400'
   const letterSpacing = style.letterSpacing as string || '0'
+  const fontStyle  = style.fontStyle as string || 'normal'
+
+  // Compute SVG gradient coords from CSS angle
+  const buildGradCoords = (angle: number) => {
+    const rad = (angle * Math.PI) / 180
+    return {
+      x1: (0.5 - 0.5 * Math.sin(rad)).toFixed(4),
+      y1: (0.5 + 0.5 * Math.cos(rad)).toFixed(4),
+      x2: (0.5 + 0.5 * Math.sin(rad)).toFixed(4),
+      y2: (0.5 - 0.5 * Math.cos(rad)).toFixed(4),
+    }
+  }
+
+  const hasShadow = shadow && (shadow.offsetX || shadow.offsetY || shadow.blur)
+  const hasGradient = gradient && gradient.colors && gradient.colors.length >= 2
+  const fill = hasGradient ? `url(#${gradId})` : baseFill
+  const gradCoords = hasGradient ? buildGradCoords(gradient!.angle ?? 90) : null
 
   return (
     <svg width={w} height={h} style={{ overflow: 'visible', position: 'absolute', top: 0, left: 0 }}>
       <defs>
-        <path id={id} d={buildPath()} />
+        <path id={pathId} d={buildPath()} />
+        {hasGradient && gradCoords && (
+          <linearGradient id={gradId} x1={gradCoords.x1} y1={gradCoords.y1} x2={gradCoords.x2} y2={gradCoords.y2}>
+            <stop offset="0%" stopColor={gradient!.colors![0]} />
+            <stop offset="100%" stopColor={gradient!.colors![1]} />
+          </linearGradient>
+        )}
+        {hasShadow && (
+          <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow
+              dx={shadow!.offsetX ?? 0}
+              dy={shadow!.offsetY ?? 0}
+              stdDeviation={(shadow!.blur ?? 0) / 2}
+              floodColor={shadow!.color || '#000000'}
+              floodOpacity={0.5}
+            />
+          </filter>
+        )}
       </defs>
       <text
         fontSize={fontSize}
         fontFamily={fontFamily}
         fill={fill}
         fontWeight={fontWeight}
+        fontStyle={fontStyle}
         letterSpacing={letterSpacing}
         textAnchor="middle"
+        filter={hasShadow ? `url(#${filterId})` : undefined}
       >
-        <textPath href={`#${id}`} startOffset="50%">
+        <textPath href={`#${pathId}`} startOffset="50%">
           {text}
         </textPath>
       </text>
@@ -277,13 +321,22 @@ const CanvasEnhanced: React.FC<Props> = ({
     if (p.stroke) {
       style.WebkitTextStroke = `${p.stroke.width}px ${p.stroke.color}`
     }
-    if (p.gradient) {
-      const colors = p.gradient.colors?.join(', ') || '#000, #fff'
-      style.background = `linear-gradient(${p.gradient.angle || 90}deg, ${colors})`
-      style.WebkitBackgroundClip = 'text'
-      style.WebkitTextFillColor = 'transparent'
-    }
+    // Note: gradient is NOT applied here — it's applied on a <span> inside the text div
+    // to avoid making the entire div background a gradient
     return style
+  }
+
+  const getGradientSpanStyle = (el: CanvasElement): React.CSSProperties | null => {
+    const p = el.properties
+    if (!p.gradient) return null
+    const colors = p.gradient.colors?.join(', ') || '#000, #fff'
+    return {
+      background: `linear-gradient(${p.gradient.angle || 90}deg, ${colors})`,
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
+      display: 'inline',
+    }
   }
 
   const getElementWrapStyle = (el: CanvasElement): React.CSSProperties => {
@@ -526,10 +579,21 @@ const CanvasEnhanced: React.FC<Props> = ({
               style={getTextStyle(el)}
               curve={p.textCurve!}
               curveAmount={p.curveAmount ?? 50}
+              gradient={p.gradient}
+              shadow={p.shadow}
             />
-          ) : (
-            <div style={getTextStyle(el)}>{p.text || 'Double-click to edit'}</div>
-          )
+          ) : (() => {
+            const gradStyle = getGradientSpanStyle(el)
+            const textContent = p.text || 'Double-click to edit'
+            return (
+              <div style={getTextStyle(el)}>
+                {gradStyle
+                  ? <span style={gradStyle}>{textContent}</span>
+                  : textContent
+                }
+              </div>
+            )
+          })()
         )}
 
         {/* IMAGE */}
