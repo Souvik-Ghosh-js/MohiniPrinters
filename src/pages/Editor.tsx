@@ -126,7 +126,22 @@ const renderDesignToBlob = async (
       try {
         const img = await _loadImg(background.image.src)
         ctx.globalAlpha = (background.image.opacity ?? 100) / 100
-        ctx.drawImage(img, 0, 0, cw, ch)
+        const blur = background.image.blur ?? 0
+        if (blur > 0) ctx.filter = `blur(${blur}px)`
+        
+        // Background cover logic
+        const imgAspect = img.width / img.height
+        const canvasAspect = cw / ch
+        let sx = 0, sy = 0, sw = img.width, sh = img.height
+        if (imgAspect > canvasAspect) {
+          sw = img.height * canvasAspect
+          sx = (img.width - sw) / 2
+        } else {
+          sh = img.width / canvasAspect
+          sy = (img.height - sh) / 2
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch)
+        ctx.filter = 'none'
       } catch {}
     } else {
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cw, ch)
@@ -140,28 +155,175 @@ const renderDesignToBlob = async (
       const p = el.properties
       ctx.save()
       ctx.globalAlpha = (el.opacity ?? 100) / 100
+
+      // Filters
+      const filterParts: string[] = []
+      if (p.brightness !== undefined && p.brightness !== 100) filterParts.push(`brightness(${p.brightness}%)`)
+      if (p.contrast  !== undefined && p.contrast  !== 100) filterParts.push(`contrast(${p.contrast}%)`)
+      if (p.saturation!== undefined && p.saturation!== 100) filterParts.push(`saturate(${p.saturation}%)`)
+      if (p.hueRotate !== undefined && p.hueRotate !== 0)   filterParts.push(`hue-rotate(${p.hueRotate}deg)`)
+      if (p.blur      !== undefined && p.blur      !== 0)   filterParts.push(`blur(${p.blur}px)`)
+      if (p.grayscale !== undefined && p.grayscale !== 0)   filterParts.push(`grayscale(${p.grayscale}%)`)
+      if (p.sepia     !== undefined && p.sepia     !== 0)   filterParts.push(`sepia(${p.sepia}%)`)
+      if (filterParts.length > 0) ctx.filter = filterParts.join(' ')
+
+      // Blending
+      if (p.blendMode && p.blendMode !== 'normal') {
+        ctx.globalCompositeOperation = p.blendMode as GlobalCompositeOperation
+      }
+
       if (el.rotation) {
         const cx = el.x + el.width / 2, cy = el.y + el.height / 2
         ctx.translate(cx, cy); ctx.rotate((el.rotation * Math.PI) / 180); ctx.translate(-cx, -cy)
       }
 
       if (el.type === 'image' && p.src) {
-        try { const img = await _loadImg(p.src); ctx.drawImage(img, el.x, el.y, el.width, el.height) } catch {}
+        try {
+          const img = await _loadImg(p.src)
+          const fit = p.objectFit || 'cover'
+          
+          if (fit === 'cover' || fit === 'contain') {
+            const imgAspect = img.width / img.height
+            const boxAspect = el.width / el.height
+            let dx = 0, dy = 0, dw = el.width, dh = el.height
+            let sx = 0, sy = 0, sw = img.width, sh = img.height
+
+            if (fit === 'cover') {
+              if (imgAspect > boxAspect) {
+                sw = img.height * boxAspect
+                sx = (img.width - sw) / 2
+              } else {
+                sh = img.width / boxAspect
+                sy = (img.height - sh) / 2
+              }
+            } else { // contain
+              if (imgAspect > boxAspect) {
+                dh = el.width / imgAspect
+                dy = (el.height - dh) / 2
+              } else {
+                dw = el.height * imgAspect
+                dx = (el.width - dw) / 2
+              }
+            }
+            
+            // Apply flip if needed
+            if (p.flipX || p.flipY) {
+              const fX = p.flipX ? -1 : 1
+              const fY = p.flipY ? -1 : 1
+              ctx.save()
+              ctx.translate(el.x + el.width / 2, el.y + el.height / 2)
+              ctx.scale(fX, fY)
+              ctx.drawImage(img, sx, sy, sw, sh, -dw/2 + dx, -dh/2 + dy, dw, dh)
+              ctx.restore()
+            } else {
+              ctx.drawImage(img, sx, sy, sw, sh, el.x + dx, el.y + dy, dw, dh)
+            }
+          } else {
+            // Fill
+            if (p.flipX || p.flipY) {
+              const fX = p.flipX ? -1 : 1
+              const fY = p.flipY ? -1 : 1
+              ctx.save()
+              ctx.translate(el.x + el.width / 2, el.y + el.height / 2)
+              ctx.scale(fX, fY)
+              ctx.drawImage(img, -el.width/2, -el.height/2, el.width, el.height)
+              ctx.restore()
+            } else {
+              ctx.drawImage(img, el.x, el.y, el.width, el.height)
+            }
+          }
+        } catch {}
 
       } else if (el.type === 'shape') {
         const st = p.shapeType || (p.borderRadius === 999 ? 'circle' : 'rect')
-        ctx.fillStyle = p.fill === 'transparent' ? 'rgba(0,0,0,0)' : (p.fill || '#2980b9')
+        
+        ctx.beginPath()
+        const x = el.x, y = el.y, w = el.width, h = el.height
+        
         if (st === 'circle') {
-          ctx.beginPath(); ctx.ellipse(el.x + el.width/2, el.y + el.height/2, el.width/2, el.height/2, 0, 0, Math.PI*2); ctx.fill()
+          ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI*2)
         } else if (st === 'triangle') {
-          ctx.beginPath(); ctx.moveTo(el.x + el.width/2, el.y); ctx.lineTo(el.x + el.width, el.y + el.height); ctx.lineTo(el.x, el.y + el.height); ctx.closePath(); ctx.fill()
+          ctx.moveTo(x + w/2, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath()
         } else if (st === 'diamond') {
-          ctx.beginPath(); ctx.moveTo(el.x + el.width/2, el.y); ctx.lineTo(el.x + el.width, el.y + el.height/2); ctx.lineTo(el.x + el.width/2, el.y + el.height); ctx.lineTo(el.x, el.y + el.height/2); ctx.closePath(); ctx.fill()
+          ctx.moveTo(x + w/2, y); ctx.lineTo(x + w, y + h/2); ctx.lineTo(x + w/2, y + h); ctx.lineTo(x, y + h/2); ctx.closePath()
+        } else if (st === 'star') {
+          const spikes = 5, outerR = Math.min(w, h)/2, innerR = outerR * 0.4
+          const cx = x + w/2, cy = y + h/2
+          let rot = Math.PI / 2 * 3, step = Math.PI / spikes
+          ctx.moveTo(cx, cy - outerR)
+          for (let i = 0; i < spikes; i++) {
+            ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR); rot += step
+            ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR); rot += step
+          }
+          ctx.closePath()
+        } else if (st === 'pentagon') {
+          const cx = x+w/2, cy = y+h/2, r = Math.min(w,h)/2
+          for(let i=0; i<5; i++) {
+            const a = (i * 2 * Math.PI / 5) - Math.PI/2
+            const px = cx + r*Math.cos(a), py = cy + r*Math.sin(a)
+            if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py)
+          }
+          ctx.closePath()
+        } else if (st === 'hexagon') {
+          const cx = x+w/2, cy = y+h/2, r = Math.min(w,h)/2
+          for(let i=0; i<6; i++) {
+            const a = (i * 2 * Math.PI / 6) - Math.PI/2
+            const px = cx + r*Math.cos(a), py = cy + r*Math.sin(a)
+            if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py)
+          }
+          ctx.closePath()
+        } else if (st === 'heart') {
+          // Precise heart path
+          const cx = x + w/2, cy = y + h/2
+          ctx.moveTo(cx, y + h * 0.9)
+          ctx.bezierCurveTo(x, y + h * 0.6, x, y + h * 0.3, cx, y + h * 0.3)
+          ctx.bezierCurveTo(x + w, y + h * 0.3, x + w, y + h * 0.6, cx, y + h * 0.9)
+          ctx.closePath()
+        } else if (st === 'arrow_right') {
+          ctx.moveTo(x, y + h*0.2); ctx.lineTo(x + w*0.6, y + h*0.2); ctx.lineTo(x + w*0.6, y); 
+          ctx.lineTo(x + w, y + h*0.5); ctx.lineTo(x + w*0.6, y + h); ctx.lineTo(x + w*0.6, y + h*0.8);
+          ctx.lineTo(x, y + h*0.8); ctx.closePath()
+        } else if (st === 'arrow_up') {
+          ctx.moveTo(x + w*0.2, y + h); ctx.lineTo(x + w*0.2, y + h*0.4); ctx.lineTo(x, y + h*0.4);
+          ctx.lineTo(x + w*0.5, y); ctx.lineTo(x + w, y + h*0.4); ctx.lineTo(x + w*0.8, y + h*0.4);
+          ctx.lineTo(x + w*0.8, y + h); ctx.closePath()
+        } else if (st === 'cross') {
+          ctx.moveTo(x + w*0.1, y + h*0.4); ctx.lineTo(x + w*0.4, y + h*0.4); ctx.lineTo(x + w*0.4, y + h*0.1);
+          ctx.lineTo(x + w*0.6, y + h*0.1); ctx.lineTo(x + w*0.6, y + h*0.4); ctx.lineTo(x + w*0.9, y + h*0.4);
+          ctx.lineTo(x + w*0.9, y + h*0.6); ctx.lineTo(x + w*0.6, y + h*0.6); ctx.lineTo(x + w*0.6, y + h*0.9);
+          ctx.lineTo(x + w*0.4, y + h*0.9); ctx.lineTo(x + w*0.4, y + h*0.6); ctx.lineTo(x + w*0.1, y + h*0.6); ctx.closePath()
+        } else if (st === 'parallelogram') {
+          ctx.moveTo(x + w*0.25, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w*0.75, y + h); ctx.lineTo(x, y + h); ctx.closePath()
+        } else if (st === 'trapezoid') {
+          ctx.moveTo(x + w*0.2, y); ctx.lineTo(x + w*0.8, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath()
         } else {
-          const r = Math.min(p.borderRadius || 0, el.width/2, el.height/2)
-          if (r > 0) { ctx.beginPath(); ctx.roundRect(el.x, el.y, el.width, el.height, r); ctx.fill() }
-          else ctx.fillRect(el.x, el.y, el.width, el.height)
+          const r = Math.min(p.borderRadius || 0, w/2, h/2)
+          if (r > 0) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h)
         }
+
+        // Fill color or gradient
+        if (p.gradient && p.gradient.colors && p.gradient.colors.length >= 2) {
+          const ang = (p.gradient.angle || 90) * Math.PI / 180
+          const grad = ctx.createLinearGradient(x, y, x + w * Math.cos(ang), y + h * Math.sin(ang))
+          p.gradient.colors.forEach((c, i) => grad.addColorStop(i / (p.gradient!.colors.length - 1), c))
+          ctx.fillStyle = grad
+        } else {
+          ctx.fillStyle = p.fill === 'transparent' ? 'rgba(0,0,0,0)' : (p.fill || '#2980b9')
+        }
+
+        // Shadow
+        if (p.shadow && (p.shadow.blur || p.shadow.offsetX || p.shadow.offsetY)) {
+          ctx.shadowBlur = p.shadow.blur || 0
+          ctx.shadowColor = p.shadow.color || '#000'
+          ctx.shadowOffsetX = p.shadow.offsetX || 0
+          ctx.shadowOffsetY = p.shadow.offsetY || 0
+        }
+
+        ctx.fill()
+        
+        // Reset shadow
+        ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0
+
         const stroke = p.stroke
         if (stroke && stroke.width > 0) {
           ctx.strokeStyle = stroke.color || '#000'; ctx.lineWidth = stroke.width; ctx.stroke()
@@ -170,13 +332,30 @@ const renderDesignToBlob = async (
       } else if (el.type === 'text') {
         const fontSize = p.fontSize || 24
         ctx.font = `${p.fontStyle || 'normal'} ${p.fontWeight || '400'} ${fontSize}px ${p.fontFamily || 'Arial'}, Arial, sans-serif`
-        ctx.fillStyle = p.fill || '#000000'
         ctx.textBaseline = 'middle'
+
+        // Fill color or gradient
+        if (p.gradient && p.gradient.colors && p.gradient.colors.length >= 2) {
+          const ang = (p.gradient.angle || 90) * Math.PI / 180
+          const grad = ctx.createLinearGradient(el.x, el.y, el.x + el.width * Math.cos(ang), el.y + el.height * Math.sin(ang))
+          p.gradient.colors.forEach((c, i) => grad.addColorStop(i / (p.gradient!.colors.length - 1), c))
+          ctx.fillStyle = grad
+        } else {
+          ctx.fillStyle = p.fill || '#000000'
+        }
+
+        // Shadow
+        if (p.shadow && (p.shadow.blur || p.shadow.offsetX || p.shadow.offsetY)) {
+          ctx.shadowBlur = p.shadow.blur || 0
+          ctx.shadowColor = p.shadow.color || '#000'
+          ctx.shadowOffsetX = p.shadow.offsetX || 0
+          ctx.shadowOffsetY = p.shadow.offsetY || 0
+        }
 
         const stroke = p.stroke
         if (stroke && stroke.width > 0) {
           ctx.strokeStyle = stroke.color || '#000000'
-          ctx.lineWidth = stroke.width * 2 // Double for outer stroke
+          ctx.lineWidth = stroke.width * 2
           ctx.lineJoin = 'round'
           ctx.lineCap = 'round'
         } else {
@@ -202,6 +381,9 @@ const renderDesignToBlob = async (
             startY += lineH
           }
         }
+        
+        // Reset shadow
+        ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0
       }
       ctx.restore()
     }
@@ -888,13 +1070,8 @@ const Editor: React.FC = () => {
 
   const exportAsPng = async () => {
     try {
-      // Custom renderer at 2× scale — correctly captures arc text
-      const cvs = document.createElement('canvas')
-      cvs.width = width * 2; cvs.height = height * 2
-      const ctx2 = cvs.getContext('2d')
-      if (ctx2) ctx2.scale(2, 2)
-      // Re-use renderDesignToBlob; we want PNG so we render then re-export from canvas
-      const blob = await renderDesignToBlob(elements, background, width, height, 2, 'image/png')
+      // Use 1× scale to match user expectations (vibrant output, same dimensions)
+      const blob = await renderDesignToBlob(elements, background, width, height, 1, 'image/png')
       if (!blob) { toast.error('Export failed'); return }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
