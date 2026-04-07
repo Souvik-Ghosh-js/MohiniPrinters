@@ -9,19 +9,19 @@ import { useSelector } from 'react-redux'
 import { RootState } from '../store'
 import { useAssets } from '../hooks/useAssets'
 import { AssetCategory, AssetFile, validateJsonTemplate, extractTemplatePreview } from '../utils/assetApi'
-import axios from 'axios'
+import api from '../utils/api'
 import toast from 'react-hot-toast'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
 type Tab = 'overview' | 'logos' | 'backgrounds' | 'schools' | 'templates' | 'elements'
 
 /* ─── OVERVIEW ─────────────────────────────────────────── */
 const Overview: React.FC<{ token: string | null }> = ({ token }) => {
   const [stats, setStats] = useState<any>(null)
   useEffect(() => {
-    axios.get(`${API}/api/admin/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+    api.get('/api/admin/dashboard')
       .then(r => setStats(r.data.data)).catch(() => {})
-  }, [token])
+  }, [])
   const cards = [
     { label: 'Total Users', value: stats?.totalUsers ?? '—', color: '#2563eb', icon: <Users size={22} /> },
     { label: 'Total Projects', value: stats?.totalProjects ?? '—', color: '#1dc48d', icon: <FolderOpen size={22} /> },

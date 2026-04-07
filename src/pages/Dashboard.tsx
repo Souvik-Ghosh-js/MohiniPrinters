@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import axios from 'axios'
+import api from '../utils/api'
 import toast from 'react-hot-toast'
 import { Plus, Trash2, LogOut, Settings, Layout, Clock, ChevronRight } from 'lucide-react'
 import { RootState } from '../store'
@@ -10,7 +10,7 @@ import { DESIGN_TEMPLATES } from '../types/canvas'
 import TemplateThumbnail from '../components/Editor/TemplateThumbnail'
 import { fixProtocol } from '../utils/assetApi'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
 
 interface AdminTemplate {
   name: string
@@ -37,8 +37,7 @@ const Dashboard: React.FC = () => {
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const navigate = useNavigate()
   const dispatch = useDispatch()
-  const { user, token } = useSelector((s: RootState) => s.auth)
-  const headers = { Authorization: `Bearer ${token}` }
+  const { user } = useSelector((s: RootState) => s.auth)
 
   useEffect(() => {
     fetchProjects()
@@ -47,7 +46,7 @@ const Dashboard: React.FC = () => {
 
   const fetchProjects = async () => {
     try {
-      const res = await axios.get(`${API}/api/projects`, { headers })
+      const res = await api.get('/api/projects')
       setProjects(res.data.data)
     } catch { toast.error('Failed to load projects') }
     finally { setLoading(false) }
@@ -56,7 +55,7 @@ const Dashboard: React.FC = () => {
   const fetchAdminTemplates = async () => {
     setTemplatesLoading(true)
     try {
-      const res = await axios.get(`${API}/api/assets/templates`)
+      const res = await api.get('/api/assets/templates')
       const files: AdminTemplate[] = res.data.files || []
       // Enrich JSON templates with bg color / preview data
       const enriched = await Promise.all(files.map(async t => {
@@ -81,11 +80,11 @@ const Dashboard: React.FC = () => {
   const handleCreate = async (templateFile?: AdminTemplate) => {
     const tpl = DESIGN_TEMPLATES[selectedSize]
     try {
-      const res = await axios.post(`${API}/api/projects`, {
+      const res = await api.post('/api/projects', {
         title: newTitle || 'Untitled Design',
         width: tpl.width,
         height: tpl.height,
-      }, { headers })
+      })
       toast.success('Project created!')
       const projectId = res.data.data.id
       if (templateFile) {
@@ -101,7 +100,7 @@ const Dashboard: React.FC = () => {
     e.stopPropagation()
     if (!confirm('Delete this project?')) return
     try {
-      await axios.delete(`${API}/api/projects/${id}`, { headers })
+      await api.delete(`/api/projects/${id}`)
       setProjects(p => p.filter(x => x.id !== id))
       toast.success('Deleted')
     } catch { toast.error('Failed to delete') }

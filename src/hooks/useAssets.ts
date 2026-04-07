@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSelector } from 'react-redux'
-import { RootState } from '../store'
 import {
   fetchAssets, uploadAsset, deleteAsset,
   AssetCategory, AssetFile,
@@ -12,12 +10,12 @@ export const useAssets = (bucket: AssetCategory) => {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
-  const { token } = useSelector((s: RootState) => s.auth)
+
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      let assets = await fetchAssets(bucket, token ?? undefined)
+      let assets = await fetchAssets(bucket)
       if (bucket === 'templates') {
         assets = await Promise.all(assets.map(async a => {
           if (a.type === 'application/json' || a.name.endsWith('.json')) {
@@ -33,24 +31,24 @@ export const useAssets = (bucket: AssetCategory) => {
       setFiles(assets)
     } catch(e:any) { setError(e.message||'Failed to load') }
     finally { setLoading(false) }
-  }, [bucket, token])
+  }, [bucket])
 
   useEffect(() => { load() }, [load])
 
   const upload = useCallback(async (file: File, meta: { name?:string; category?:string; description?:string } = {}) => {
     setUploading(true); setError('')
     try {
-      const asset = await uploadAsset(bucket, file, meta, token ?? undefined)
+      const asset = await uploadAsset(bucket, file, meta)
       setFiles(p => [...p, asset])
       return asset
     } catch(e:any) { setError(e.message||'Upload failed'); throw e }
     finally { setUploading(false) }
-  }, [bucket, token])
+  }, [bucket])
 
   const remove = useCallback(async (fileName: string) => {
-    try { await deleteAsset(bucket, fileName, token ?? undefined); setFiles(p => p.filter(f => f.name !== fileName)) }
+    try { await deleteAsset(bucket, fileName); setFiles(p => p.filter(f => f.name !== fileName)) }
     catch(e:any) { setError(e.message||'Delete failed'); throw e }
-  }, [bucket, token])
+  }, [bucket])
 
   return { files, loading, uploading, error, load, upload, remove }
 }

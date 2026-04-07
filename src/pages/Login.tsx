@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import axios from 'axios'
+import api from '../utils/api'
 import toast from 'react-hot-toast'
 import { loginSuccess } from '../store/slices/authSlice'
 
@@ -17,7 +17,7 @@ const Login: React.FC = () => {
     if (!email || !password) { toast.error('Please fill in all fields'); return }
     setLoading(true)
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/auth/login`, { email, password })
+      const res = await api.post('/api/auth/login', { email, password })
       dispatch(loginSuccess({ user: res.data.user, token: res.data.token }))
       toast.success('Welcome back!')
       navigate('/dashboard')

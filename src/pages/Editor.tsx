@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import axios from 'axios'
+import api from '../utils/api'
 import toast from 'react-hot-toast'
 import {
   ArrowLeft, Save, Undo, Redo, ZoomIn, ZoomOut, Download,
@@ -24,7 +24,7 @@ import { useAssets } from '../hooks/useAssets'
 import { AssetFile, fixProtocol } from '../utils/assetApi'
 import TemplateThumbnail from '../components/Editor/TemplateThumbnail'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
 
 type LeftTab = 'templates' | 'assets' | 'add' | 'layers' | 'size'
 type RightTab = 'properties' | 'background'
@@ -84,7 +84,11 @@ const _drawArcText = (
     const cw = widths[i]
     const t = tAt(cursor + cw / 2)
     const [x, y] = ptAt(t)
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angAt(t)); ctx.fillText(ch, -cw / 2, 0); ctx.restore()
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angAt(t))
+    if (ctx.strokeStyle !== 'rgba(0, 0, 0, 0)' && ctx.lineWidth > 0) {
+      ctx.strokeText(ch, -cw / 2, 0)
+    }
+    ctx.fillText(ch, -cw / 2, 0); ctx.restore()
     cursor += cw
   })
 }
@@ -93,7 +97,8 @@ const renderDesignToBlob = async (
   elements: CanvasElement[],
   background: Background,
   cw: number, ch: number,
-  scale = 1
+  scale = 1,
+  format = 'image/jpeg'
 ): Promise<Blob | null> => {
   try {
     const cvs = document.createElement('canvas')
@@ -140,7 +145,7 @@ const renderDesignToBlob = async (
         ctx.translate(cx, cy); ctx.rotate((el.rotation * Math.PI) / 180); ctx.translate(-cx, -cy)
       }
 
-      if (el.type === 'image') {
+      if (el.type === 'image' && p.src) {
         try { const img = await _loadImg(p.src); ctx.drawImage(img, el.x, el.y, el.width, el.height) } catch {}
 
       } else if (el.type === 'shape') {
@@ -157,8 +162,9 @@ const renderDesignToBlob = async (
           if (r > 0) { ctx.beginPath(); ctx.roundRect(el.x, el.y, el.width, el.height, r); ctx.fill() }
           else ctx.fillRect(el.x, el.y, el.width, el.height)
         }
-        if ((p.stroke?.width || 0) > 0) {
-          ctx.strokeStyle = p.stroke.color || '#000'; ctx.lineWidth = p.stroke.width; ctx.stroke()
+        const stroke = p.stroke
+        if (stroke && stroke.width > 0) {
+          ctx.strokeStyle = stroke.color || '#000'; ctx.lineWidth = stroke.width; ctx.stroke()
         }
 
       } else if (el.type === 'text') {
@@ -166,6 +172,17 @@ const renderDesignToBlob = async (
         ctx.font = `${p.fontStyle || 'normal'} ${p.fontWeight || '400'} ${fontSize}px ${p.fontFamily || 'Arial'}, Arial, sans-serif`
         ctx.fillStyle = p.fill || '#000000'
         ctx.textBaseline = 'middle'
+
+        const stroke = p.stroke
+        if (stroke && stroke.width > 0) {
+          ctx.strokeStyle = stroke.color || '#000000'
+          ctx.lineWidth = stroke.width * 2 // Double for outer stroke
+          ctx.lineJoin = 'round'
+          ctx.lineCap = 'round'
+        } else {
+          ctx.strokeStyle = 'rgba(0,0,0,0)'
+          ctx.lineWidth = 0
+        }
 
         if (p.textCurve && p.textCurve !== 'none') {
           const amount = p.curveAmount ?? 50
@@ -179,13 +196,17 @@ const renderDesignToBlob = async (
           const lineH = fontSize * (p.lineHeight || 1.4)
           let startY = el.y + (el.height - lines.length * lineH) / 2 + lineH / 2
           const x = p.textAlign === 'left' ? el.x + 4 : p.textAlign === 'right' ? el.x + el.width - 4 : el.x + el.width / 2
-          for (const line of lines) { ctx.fillText(line, x, startY); startY += lineH }
+          for (const line of lines) {
+            if (ctx.lineWidth > 0) ctx.strokeText(line, x, startY)
+            ctx.fillText(line, x, startY)
+            startY += lineH
+          }
         }
       }
       ctx.restore()
     }
 
-    return new Promise(res => cvs.toBlob(b => res(b), 'image/jpeg', 0.85))
+    return new Promise(res => cvs.toBlob(b => res(b), format, format==='image/jpeg'?0.85:undefined))
   } catch (err) {
     console.error('Render failed:', err)
     return null
@@ -633,7 +654,7 @@ const Editor: React.FC = () => {
   const dispatch = useDispatch()
   const { token } = useSelector((s: RootState) => s.auth)
   const { elements, selectedElementId, background, width, height, zoom, historyIndex, history } = useSelector((s: RootState) => s.canvas)
-  const headers = { Authorization: `Bearer ${token}` }
+
 
   const [title, setTitle] = useState('Untitled Design')
   const [loading, setLoading] = useState(true)
@@ -681,7 +702,7 @@ const Editor: React.FC = () => {
 
   const fetchProject = async () => {
     try {
-      const res = await axios.get(`${API}/api/projects/${projectId}`, { headers })
+      const res = await api.get(`/api/projects/${projectId}`)
       const p = res.data.data
       setTitle(p.title)
       let canvasData = { elements: [], background: { type: 'solid', solid: { color: '#ffffff', opacity: 100 } } as Background }
@@ -730,11 +751,11 @@ const Editor: React.FC = () => {
   const saveProject = async (showToast = true) => {
     setSaving(true)
     try {
-      await axios.put(`${API}/api/projects/${projectId}`, {
+      await api.put(`/api/projects/${projectId}`, {
         title,
         canvas_data: JSON.stringify({ elements, background }),
         width, height,
-      }, { headers })
+      })
       if (showToast) toast.success('Saved!')
 
       // Brief deselect for cleaner snapshot
@@ -745,7 +766,7 @@ const Editor: React.FC = () => {
         if (!blob) return
         const fd = new FormData()
         fd.append('thumbnail', blob, 'thumb.jpg')
-        await axios.post(`${API}/api/projects/${projectId}/thumbnail`, fd, { headers }).catch(() => {})
+        await api.post(`/api/projects/${projectId}/thumbnail`, fd).catch(() => {})
       }).catch(() => {})
     } catch { if (showToast) toast.error('Save failed') }
     finally { setSaving(false) }
@@ -873,11 +894,11 @@ const Editor: React.FC = () => {
       const ctx2 = cvs.getContext('2d')
       if (ctx2) ctx2.scale(2, 2)
       // Re-use renderDesignToBlob; we want PNG so we render then re-export from canvas
-      const blob = await renderDesignToBlob(elements, background, width, height, 2)
+      const blob = await renderDesignToBlob(elements, background, width, height, 2, 'image/png')
       if (!blob) { toast.error('Export failed'); return }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.download = `${title || 'design'}.jpg`
+      a.download = `${title || 'design'}.png`
       a.href = url; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
       toast.success('Exported!')
@@ -1025,6 +1046,9 @@ const Editor: React.FC = () => {
         <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:6, width:30, height:30, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>dispatch(redo())} disabled={historyIndex>=history.length-1}><Redo size={15}/></button>
         <button style={{ background:'var(--gold)', border:'none', borderRadius:7, padding:'6px 12px', color:'#fff', cursor:'pointer', fontSize:'0.8125rem', fontWeight:700, display:'flex', alignItems:'center', gap:5 }} onClick={()=>saveProject(true)} disabled={saving}>
           {saving?'…':<><Save size={13}/> Save</>}
+        </button>
+        <button style={{ background:'rgba(0,0,0,0.06)', border:'none', borderRadius:7, width:34, height:34, color:'#374151', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={exportAsPng} title="Download PNG">
+          <Download size={18}/>
         </button>
       </header>
 

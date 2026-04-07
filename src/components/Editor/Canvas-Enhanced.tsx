@@ -64,6 +64,8 @@ const CurvedText: React.FC<{
   const fontWeight = style.fontWeight as string || '400'
   const letterSpacing = style.letterSpacing as string || '0'
   const fontStyle  = style.fontStyle as string || 'normal'
+  const strokeWidth = style.WebkitTextStrokeWidth as string || '0px'
+  const strokeColor = style.WebkitTextStrokeColor as string || 'transparent'
 
   // Compute SVG gradient coords from CSS angle
   const buildGradCoords = (angle: number) => {
@@ -110,6 +112,9 @@ const CurvedText: React.FC<{
         fontWeight={fontWeight}
         fontStyle={fontStyle}
         letterSpacing={letterSpacing}
+        stroke={strokeColor !== 'transparent' ? strokeColor : undefined}
+        strokeWidth={strokeWidth}
+        paintOrder="stroke fill"
         textAnchor="middle"
         filter={hasShadow ? `url(#${filterId})` : undefined}
       >
@@ -318,8 +323,10 @@ const CanvasEnhanced: React.FC<Props> = ({
         style.textShadow = `${oX}px ${oY}px ${blur}px ${color}`
       }
     }
-    if (p.stroke) {
-      style.WebkitTextStroke = `${p.stroke.width}px ${p.stroke.color}`
+    if (p.stroke && (p.stroke.width || 0) > 0) {
+      style.WebkitTextStroke = `${p.stroke.width}px ${p.stroke.color || '#000'}`
+      // To simulate "outside" stroke in CSS as much as possible
+      style.paintOrder = 'stroke fill'
     }
     // Note: gradient is NOT applied here — it's applied on a <span> inside the text div
     // to avoid making the entire div background a gradient

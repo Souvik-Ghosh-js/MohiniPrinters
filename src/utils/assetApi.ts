@@ -1,7 +1,4 @@
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-
-// Strip any trailing slash so URL joins are clean
-const BASE = API.replace(/\/$/, '')
+import api from './api'
 
 export type AssetCategory = 'logos' | 'backgrounds' | 'schools' | 'templates' | 'elements'
 
@@ -18,51 +15,39 @@ export interface AssetFile {
   previewUrl?: string
 }
 
-// Rebuild the file URL using VITE_API_URL as the base so it always
-// uses the correct protocol (https in prod), regardless of what the
-// backend returns. The backend constructs URLs with req.protocol which
-// is 'http' when sitting behind an SSL-terminating proxy.
+// Rebuild the file URL based on API base for consistency
 const rebuildUrl = (bucket: AssetCategory, filename: string): string =>
-  `${BASE}/uploads/${bucket}/${encodeURIComponent(filename)}`
+  `/uploads/${bucket}/${encodeURIComponent(filename)}`
 
-export const fetchAssets = async (bucket: AssetCategory, token?: string): Promise<AssetFile[]> => {
-  const headers: Record<string,string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`${BASE}/api/assets/${bucket}`, { headers })
-  if (!res.ok) throw new Error(`Failed to fetch ${bucket}`)
-  const data = await res.json()
-  // Override the URL from the server with one built from VITE_API_URL
+export const fetchAssets = async (bucket: AssetCategory): Promise<AssetFile[]> => {
+  const res = await api.get(`/api/assets/${bucket}`)
+  const data = res.data
+  // Override the URL from the server with one built for consistency
   const files = (data.files as AssetFile[]).map(f => ({
     ...f,
-    url: rebuildUrl(bucket, f.name),
+    url: `${api.defaults.baseURL}${rebuildUrl(bucket, f.name)}`,
   }))
   return files
 }
 
 export const uploadAsset = async (
   bucket: AssetCategory, file: File,
-  meta: { name?: string; category?: string; description?: string },
-  token?: string
+  meta: { name?: string; category?: string; description?: string }
 ): Promise<AssetFile> => {
-  const headers: Record<string,string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
   const fd = new FormData()
   fd.append('file', file)
   if (meta.name) fd.append('displayName', meta.name)
   if (meta.category) fd.append('category', meta.category)
   if (meta.description) fd.append('description', meta.description)
-  const res = await fetch(`${BASE}/api/assets/${bucket}`, { method:'POST', headers, body:fd })
-  if (!res.ok) { const err = await res.json().catch(()=>({message:'Upload failed'})); throw new Error(err.message||'Upload failed') }
-  const data = await res.json()
+  
+  const res = await api.post(`/api/assets/${bucket}`, fd)
+  const data = res.data
   const f = data.file as AssetFile
-  return { ...f, url: rebuildUrl(bucket, f.name) }
+  return { ...f, url: `${api.defaults.baseURL}${rebuildUrl(bucket, f.name)}` }
 }
 
-export const deleteAsset = async (bucket: AssetCategory, fileName: string, token?: string): Promise<void> => {
-  const headers: Record<string,string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(`${BASE}/api/assets/${bucket}/${encodeURIComponent(fileName)}`, { method:'DELETE', headers })
-  if (!res.ok) throw new Error('Delete failed')
+export const deleteAsset = async (bucket: AssetCategory, fileName: string): Promise<void> => {
+  await api.delete(`/api/assets/${bucket}/${encodeURIComponent(fileName)}`)
 }
 
 // Kept for backwards-compat; no longer needed but harmless
@@ -74,7 +59,12 @@ export const fixProtocol = (url: string): string => {
 }
 
 export const loadJsonTemplate = async (url: string): Promise<any> => {
-  try { const res = await fetch(url); if (!res.ok) return null; return await res.json() }
+  try { 
+    // For external URLs we still use fetch or a clean axios call
+    const res = await fetch(url); 
+    if (!res.ok) return null; 
+    return await res.json() 
+  }
   catch { return null }
 }
 
