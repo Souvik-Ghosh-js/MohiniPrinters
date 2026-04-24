@@ -105,6 +105,11 @@ const renderDesignToBlob = async (
     cvs.width = cw * scale; cvs.height = ch * scale
     const ctx = cvs.getContext('2d')
     if (!ctx) return null
+    
+    // Set high-quality smoothing
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+
     if (scale !== 1) ctx.scale(scale, scale)
 
     // Background
@@ -140,7 +145,7 @@ const renderDesignToBlob = async (
           sh = img.width / canvasAspect
           sy = (img.height - sh) / 2
         }
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch)
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, Math.round(cw), Math.round(ch))
         ctx.filter = 'none'
       } catch {}
     } else {
@@ -213,10 +218,10 @@ const renderDesignToBlob = async (
               ctx.save()
               ctx.translate(el.x + el.width / 2, el.y + el.height / 2)
               ctx.scale(fX, fY)
-              ctx.drawImage(img, sx, sy, sw, sh, -dw/2 + dx, -dh/2 + dy, dw, dh)
+              ctx.drawImage(img, sx, sy, sw, sh, Math.round(-dw/2 + dx), Math.round(-dh/2 + dy), Math.round(dw), Math.round(dh))
               ctx.restore()
             } else {
-              ctx.drawImage(img, sx, sy, sw, sh, el.x + dx, el.y + dy, dw, dh)
+              ctx.drawImage(img, sx, sy, sw, sh, Math.round(el.x + dx), Math.round(el.y + dy), Math.round(dw), Math.round(dh))
             }
           } else {
             // Fill
@@ -226,10 +231,10 @@ const renderDesignToBlob = async (
               ctx.save()
               ctx.translate(el.x + el.width / 2, el.y + el.height / 2)
               ctx.scale(fX, fY)
-              ctx.drawImage(img, -el.width/2, -el.height/2, el.width, el.height)
+              ctx.drawImage(img, Math.round(-el.width/2), Math.round(-el.height/2), Math.round(el.width), Math.round(el.height))
               ctx.restore()
             } else {
-              ctx.drawImage(img, el.x, el.y, el.width, el.height)
+              ctx.drawImage(img, Math.round(el.x), Math.round(el.y), Math.round(el.width), Math.round(el.height))
             }
           }
         } catch {}
@@ -1070,8 +1075,8 @@ const Editor: React.FC = () => {
 
   const exportAsPng = async () => {
     try {
-      // Use 1× scale to match user expectations (vibrant output, same dimensions)
-      const blob = await renderDesignToBlob(elements, background, width, height, 1, 'image/png')
+      // Use 2× scale for High Quality (crisp images, high-DPI compatible)
+      const blob = await renderDesignToBlob(elements, background, width, height, 2, 'image/png')
       if (!blob) { toast.error('Export failed'); return }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
